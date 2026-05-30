@@ -5,16 +5,16 @@ import { PersonCard } from "@/components/tree/PersonCard";
 import { EditPanel } from "@/components/tree/EditPanel";
 import { Toolbar } from "@/components/tree/Toolbar";
 import { MiniMap } from "@/components/tree/MiniMap";
-import { AddPersonDialog } from "@/components/tree/AddPersonDialog";
+import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { Person } from "@/lib/types";
-import { LogIn, Plus, TreePine } from "lucide-react";
+import { LogIn, TreePine } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Jabot — Arbre généalogique" },
-      { name: "description", content: "Votre arbre généalogique africain sur un canvas infini." },
+      { title: "Jabot — Arbre genealogique" },
+      { name: "description", content: "Votre arbre genealogique africain sur un canvas infini." },
     ],
   }),
   component: JabotCanvas,
@@ -25,15 +25,17 @@ const WORLD = { w: 3000, h: 2000 };
 function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, loadTree } = useFamilyTreeStore();
-  const { isAuthenticated, phone, logout } = useAuthStore();
+  const { isAuthenticated, onboarded, phone, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+
+  // L'onboarding s'affiche une seule fois : connecte mais pas encore rattache.
+  const showOnboarding = isAuthenticated && !onboarded;
 
   useEffect(() => {
     loadTree();
@@ -117,26 +119,19 @@ function JabotCanvas() {
             <div className="flex items-center gap-3">
               <span className="hidden text-xs text-muted-foreground sm:block">{phone}</span>
               <button
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                onClick={() => setAddDialogOpen(true)}
-              >
-                <Plus className="size-3.5" />
-                Ajouter
-              </button>
-              <button
                 onClick={logout}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
-                Déconnexion
+                Deconnexion
               </button>
             </div>
           ) : (
             <button
               onClick={() => navigate({ to: "/auth" })}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <LogIn className="size-3.5" />
-              Se connecter
+              Presenter ma famille
             </button>
           )}
         </div>
@@ -166,25 +161,18 @@ function JabotCanvas() {
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="text-7xl">🌳</div>
-                <h2 className="font-serif text-2xl text-foreground">Commencez votre arbre</h2>
+                <h2 className="font-serif text-2xl text-foreground">L'arbre est encore vide</h2>
                 <p className="max-w-xs text-sm text-muted-foreground">
                   {isAuthenticated
-                    ? "Ajoutez votre première personne pour démarrer votre arbre généalogique."
-                    : "Connectez-vous pour créer et modifier votre arbre généalogique."}
+                    ? "Completez votre fiche pour demarrer l'arbre genealogique."
+                    : "Connectez-vous pour vous ajouter et presenter votre famille."}
                 </p>
-                {isAuthenticated ? (
-                  <button
-                    onClick={() => setAddDialogOpen(true)}
-                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    <Plus className="size-4" /> Ajouter une personne
-                  </button>
-                ) : (
+                {!isAuthenticated && (
                   <button
                     onClick={() => navigate({ to: "/auth" })}
                     className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
-                    <LogIn className="size-4" /> Se connecter
+                    <LogIn className="size-4" /> Presenter ma famille
                   </button>
                 )}
               </div>
@@ -224,10 +212,7 @@ function JabotCanvas() {
         <EditPanel person={selected} onClose={() => setSelectedId(null)} isAuthenticated={isAuthenticated} />
       </main>
 
-      <AddPersonDialog
-        open={addDialogOpen}
-        onClose={() => setAddDialogOpen(false)}
-      />
+      {showOnboarding && <OnboardingDialog />}
     </div>
   );
 }

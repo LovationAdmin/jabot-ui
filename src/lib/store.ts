@@ -3,10 +3,13 @@ import { persist } from "zustand/middleware";
 import { Person, Relationship, AuthState, FamilyTree } from "./types";
 import { treeApi } from "./api";
 
-// ─── Auth Store ────────────────────────────────────────────────────────────────
+// ─── Auth Store ────────────────────────────────────────────────────
 
 interface AuthStore extends AuthState {
-  login: (token: string, userId: string, phone: string) => void;
+  personId?: string;
+  onboarded: boolean;
+  login: (token: string, userId: string, phone: string, opts?: { personId?: string | null; onboarded?: boolean }) => void;
+  setOnboarded: (personId: string) => void;
   logout: () => void;
 }
 
@@ -17,26 +20,44 @@ export const useAuthStore = create<AuthStore>()(
       userId: undefined,
       phone: undefined,
       token: undefined,
+      personId: undefined,
+      onboarded: false,
 
-      login: (token, userId, phone) => {
+      login: (token, userId, phone, opts) => {
         if (typeof window !== "undefined") localStorage.setItem("jabot_token", token);
-        set({ isAuthenticated: true, token, userId, phone });
+        set({
+          isAuthenticated: true,
+          token,
+          userId,
+          phone,
+          personId: opts?.personId ?? undefined,
+          onboarded: opts?.onboarded ?? false,
+        });
       },
+
+      setOnboarded: (personId) => set({ personId, onboarded: true }),
 
       logout: () => {
         if (typeof window !== "undefined") localStorage.removeItem("jabot_token");
-        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined });
+        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined, personId: undefined, onboarded: false });
       },
     }),
     {
       name: "jabot-auth",
-      partialize: (state) => ({ isAuthenticated: state.isAuthenticated, userId: state.userId, phone: state.phone, token: state.token }),
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        userId: state.userId,
+        phone: state.phone,
+        token: state.token,
+        personId: state.personId,
+        onboarded: state.onboarded,
+      }),
       skipHydration: true,
     },
   ),
 );
 
-// ─── Family Tree Store ─────────────────────────────────────────────────────────
+// ─── Family Tree Store ─────────────────────────────────────────────
 
 interface FamilyTreeStore {
   tree: FamilyTree;
