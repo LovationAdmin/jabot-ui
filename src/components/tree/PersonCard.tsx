@@ -2,8 +2,8 @@ import { Person } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { MapPin, Music } from "lucide-react";
 
-export const CARD_W = 200;
-export const CARD_H = 96;
+export const CARD_W = 208;
+export const CARD_H = 100;
 
 interface PersonCardProps {
   person: Person;
@@ -25,29 +25,29 @@ export function PersonCard({ person, selected, onSelect }: PersonCardProps) {
       onClick={() => onSelect(person.id)}
       style={{ width: CARD_W, height: CARD_H, left: person.position?.x ?? 0, top: person.position?.y ?? 0 }}
       className={cn(
-        "absolute flex cursor-pointer select-none items-center gap-2.5 rounded-2xl border bg-card p-3 transition-all duration-150",
+        "absolute flex cursor-pointer select-none items-center gap-3 rounded-2xl border bg-card p-3 transition-all duration-200 ease-out",
         selected
-          ? "border-primary/50 shadow-card-selected ring-2 ring-primary/20"
-          : "border-border shadow-card hover:shadow-float",
-        isDeceased && "opacity-75 grayscale-[20%]",
+          ? "-translate-y-0.5 border-primary/40 shadow-card-selected ring-2 ring-primary/25"
+          : "border-border/70 shadow-card hover:-translate-y-0.5 hover:shadow-float",
+        isDeceased && "opacity-80 grayscale-[15%]",
       )}
     >
       {/* Photo */}
-      <div className="relative size-[3.25rem] shrink-0 overflow-hidden rounded-xl bg-muted">
+      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl">
         {photo ? (
           <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-2xl">
-            {person.gender === "female" ? "👩" : person.gender === "male" ? "👨" : "👤"}
+          <div className="brand-gradient flex h-full w-full items-center justify-center text-xl text-white">
+            {person.firstName?.[0]?.toUpperCase() ?? "?"}
           </div>
         )}
       </div>
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="truncate font-serif text-[15px] leading-snug text-card-foreground">{fullName}</p>
+        <p className="truncate font-display text-[15px] font-semibold leading-snug text-card-foreground">{fullName}</p>
         {person.nicknames && person.nicknames.length > 0 && (
-          <p className="truncate text-[10px] italic text-muted-foreground">« {person.nicknames[0]} »</p>
+          <p className="truncate text-[11px] text-primary/80">« {person.nicknames[0]} »</p>
         )}
         {years && <p className="mt-0.5 text-[11px] text-muted-foreground">{years}</p>}
         {person.cityOfOrigin && (
@@ -60,7 +60,7 @@ export function PersonCard({ person, selected, onSelect }: PersonCardProps) {
 
       {/* Audio badge */}
       {person.audios.length > 0 && (
-        <div className="absolute right-2 top-2 flex size-4 items-center justify-center rounded-full bg-primary/10">
+        <div className="absolute right-2.5 top-2.5 flex size-5 items-center justify-center rounded-full bg-primary/12">
           <Music className="size-2.5 text-primary" />
         </div>
       )}

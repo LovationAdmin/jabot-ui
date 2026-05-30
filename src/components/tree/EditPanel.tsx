@@ -14,13 +14,13 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
   const photo = person.photos[0];
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border bg-card">
+    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border/60 bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="font-serif text-lg text-foreground">Fiche</h2>
+      <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
+        <h2 className="font-display text-lg font-semibold text-foreground">Fiche</h2>
         <button
           onClick={onClose}
-          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <X className="size-4" />
         </button>
@@ -28,21 +28,21 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
 
       <div className="flex-1 overflow-y-auto p-5">
         {/* Photo */}
-        <div className="relative mx-auto mb-4 size-24 overflow-hidden rounded-2xl bg-muted">
+        <div className="relative mx-auto mb-4 size-24 overflow-hidden rounded-3xl">
           {photo ? (
             <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-4xl">
-              {person.gender === "female" ? "👩" : person.gender === "male" ? "👨" : "👤"}
+            <div className="brand-gradient flex h-full w-full items-center justify-center text-4xl text-white">
+              {person.firstName?.[0]?.toUpperCase() ?? "?"}
             </div>
           )}
         </div>
 
         {/* Name */}
         <div className="mb-5 text-center">
-          <h3 className="font-serif text-2xl text-foreground">{fullName}</h3>
+          <h3 className="font-display text-2xl font-bold text-foreground">{fullName}</h3>
           {person.nicknames && person.nicknames.length > 0 && (
-            <p className="mt-0.5 text-sm italic text-muted-foreground">« {person.nicknames.join(", ")} »</p>
+            <p className="mt-0.5 text-sm text-primary/80">« {person.nicknames.join(", ")} »</p>
           )}
         </div>
 
@@ -72,7 +72,7 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {person.photos.map((ph) => (
-                <img key={ph.id} src={ph.url} alt="" className="aspect-square rounded-lg object-cover" />
+                <img key={ph.id} src={ph.url} alt="" className="aspect-square rounded-xl object-cover" />
               ))}
             </div>
           </div>
@@ -95,8 +95,8 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
 
       {/* Actions */}
       {isAuthenticated && (
-        <div className="border-t border-border p-4">
-          <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+        <div className="border-t border-border/60 p-4">
+          <button className="brand-gradient w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90">
             Modifier
           </button>
         </div>

@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuthStore } from "@/lib/store";
 import { authApi } from "@/lib/api";
-import { ArrowLeft, CheckCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/auth/")({
   component: AuthPage,
@@ -54,28 +54,28 @@ function AuthPage() {
   };
 
   return (
-    <div className="canvas-grid flex min-h-screen items-center justify-center bg-canvas p-4">
+    <div className="canvas-grid flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Link
           to="/"
           className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          Retour à l'arbre
+          Retour aux arbres
         </Link>
 
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-float">
-          <div className="mb-6 flex items-center justify-center gap-2.5">
-            <div className="grid size-9 place-items-center rounded-xl bg-primary text-2xl text-primary-foreground">
-              🌳
+        <div className="rounded-3xl border border-border/60 bg-card p-8 shadow-float">
+          <div className="mb-6 flex flex-col items-center gap-3">
+            <div className="brand-gradient grid size-12 place-items-center rounded-2xl text-white shadow-sm">
+              <Sparkles className="size-6" />
             </div>
-            <span className="font-serif text-3xl text-foreground">Jabot</span>
+            <span className="font-display text-3xl font-bold tracking-tight text-foreground">Jabot</span>
           </div>
 
           {step === "phone" && (
             <>
               <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Connexion</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">Connexion</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Entrez votre numéro pour recevoir un code
                 </p>
@@ -98,7 +98,7 @@ function AuthPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  className="brand-gradient w-full rounded-xl py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {isLoading ? "Envoi…" : "Recevoir le code"}
                 </button>
@@ -109,7 +109,7 @@ function AuthPage() {
           {step === "otp" && (
             <>
               <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Vérification</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">Vérification</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Code envoyé au{" "}
                   <span className="font-medium text-foreground">{phone}</span>
@@ -142,7 +142,7 @@ function AuthPage() {
                 <button
                   type="submit"
                   disabled={isLoading || otpInput.length < 6}
-                  className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  className="brand-gradient w-full rounded-xl py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {isLoading ? "Vérification…" : "Valider"}
                 </button>
@@ -160,7 +160,7 @@ function AuthPage() {
           {step === "success" && (
             <div className="py-4 text-center">
               <CheckCircle className="mx-auto mb-3 size-16 text-green-500" />
-              <h1 className="font-serif text-2xl text-foreground">Connexion réussie !</h1>
+              <h1 className="font-display text-2xl font-bold text-foreground">Connexion réussie !</h1>
               <p className="mt-1 text-sm text-muted-foreground">Redirection en cours…</p>
             </div>
           )}
