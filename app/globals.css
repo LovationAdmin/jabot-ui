@@ -4,26 +4,32 @@
 
 @layer base {
   :root {
-    --background: 40 30% 97%;
-    --foreground: 20 14% 12%;
+    /* Modern, calm palette — cool neutrals + a single refined indigo accent */
+    --background: 210 25% 98%;
+    --foreground: 222 22% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 20 14% 12%;
+    --card-foreground: 222 22% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 20 14% 12%;
-    --primary: 28 80% 45%;
+    --popover-foreground: 222 22% 16%;
+    --primary: 243 75% 59%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 38 25% 88%;
-    --secondary-foreground: 20 14% 20%;
-    --muted: 38 20% 92%;
-    --muted-foreground: 20 10% 45%;
-    --accent: 28 60% 90%;
-    --accent-foreground: 28 80% 30%;
+    --secondary: 220 16% 95%;
+    --secondary-foreground: 222 22% 20%;
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 12% 48%;
+    --accent: 243 60% 96%;
+    --accent-foreground: 243 75% 45%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 38 20% 82%;
-    --input: 38 20% 82%;
-    --ring: 28 80% 45%;
-    --radius: 0.75rem;
+    --border: 220 18% 91%;
+    --input: 220 18% 91%;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
+
+    /* Relationship colors */
+    --rel-parent: 243 75% 62%;
+    --rel-sibling: 199 89% 52%;
+    --rel-spouse: 340 75% 60%;
   }
 }
 
@@ -32,66 +38,95 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* React Flow overrides */
+/* ---------- React Flow refinements ---------- */
 .react-flow__renderer {
   @apply rounded-none;
 }
 
+/* Smooth, soft edges */
 .react-flow__edge-path {
-  stroke: hsl(var(--border));
-  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
 }
 
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: hsl(var(--primary));
+  stroke-width: 2.5 !important;
 }
 
+/* Make connection handles subtle (almost invisible until needed) */
 .react-flow__handle {
-  width: 8px !important;
-  height: 8px !important;
+  width: 7px !important;
+  height: 7px !important;
   background-color: hsl(var(--primary)) !important;
   border: 2px solid white !important;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.react-flow__node:hover .react-flow__handle {
+  opacity: 0.6;
 }
 
 .react-flow__background {
-  background-color: hsl(40, 25%, 95%);
+  background-color: hsl(var(--background));
 }
 
-/* Custom scrollbar */
+/* Pane feels lighter */
+.react-flow__attribution {
+  display: none;
+}
+
+/* Smooth node movement */
+.react-flow__node {
+  transition: filter 0.2s ease;
+}
+
+/* ---------- Custom scrollbar ---------- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  @apply bg-muted;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   @apply bg-border rounded-full;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/40;
 }
 
-/* OTP input */
+/* ---------- OTP input ---------- */
 .otp-input {
-  @apply w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-lg focus:border-primary focus:outline-none transition-colors;
+  @apply w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-xl focus:border-primary focus:outline-none transition-colors;
 }
 
-/* Person node animations */
+/* ---------- Animations ---------- */
 @keyframes pulse-audio {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
+  50% { transform: scale(1.18); opacity: 0.65; }
 }
-
 .audio-playing {
   animation: pulse-audio 1s ease-in-out infinite;
+}
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-float-in {
+  animation: float-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Toolbar glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }

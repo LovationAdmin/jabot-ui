@@ -128,10 +128,10 @@ export function computeTreeLayout(
 ): Person[] {
   if (persons.length === 0) return persons;
 
-  const NODE_WIDTH = 220;
-  const NODE_HEIGHT = 280;
-  const H_GAP = 40;
-  const V_GAP = 80;
+  const NODE_WIDTH = 164;
+  const NODE_HEIGHT = 200;
+  const H_GAP = 48;
+  const V_GAP = 110;
 
   // Group by generation
   const generationGroups = new Map<number, Person[]>();

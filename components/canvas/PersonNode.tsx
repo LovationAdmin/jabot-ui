@@ -1,203 +1,165 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import Image from "next/image";
-import { Volume2, Edit, ChevronLeft, ChevronRight } from "lucide-react";
+import { Volume2, Pencil, MapPin } from "lucide-react";
 import { PersonNodeData } from "@/lib/types";
-import { formatDateShort, getInitials, isDeceased } from "@/lib/utils";
+import { getInitials, isDeceased } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+function yearOf(dateStr?: string): string {
+  if (!dateStr) return "";
+  const y = new Date(dateStr).getFullYear();
+  return Number.isNaN(y) ? "" : String(y);
+}
 
 function PersonNodeComponent({ data }: NodeProps<PersonNodeData>) {
   const { person, isCurrentUser, onOpenDetail, onEdit, isAuthenticated } = data;
   const deceased = isDeceased(person);
-  const [photoIdx, setPhotoIdx] = useState(0);
   const hasAudio = person.audios.length > 0;
-  const hasPhotos = person.photos.length > 0;
+  const photo = person.photos[0];
 
-  const handleClick = () => {
-    onOpenDetail?.(person);
-  };
+  const birth = yearOf(person.birthDate);
+  const death = yearOf(person.deathDate);
+  const lifespan = birth || death ? `${birth || "?"}${death ? " – " + death : ""}` : "";
 
+  const handleClick = () => onOpenDetail?.(person);
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     onEdit?.(person);
-  };
-
-  const handlePrevPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPhotoIdx((i) => (i - 1 + person.photos.length) % person.photos.length);
-  };
-
-  const handleNextPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPhotoIdx((i) => (i + 1) % person.photos.length);
   };
 
   return (
     <div
       onClick={handleClick}
       className={cn(
-        "w-[200px] rounded-xl border-2 overflow-hidden cursor-pointer shadow-sm hover:shadow-md transition-all select-none",
-        "bg-white",
-        deceased && "opacity-80",
+        "group/card relative w-[164px] cursor-pointer select-none rounded-2xl border bg-card px-3 pb-3 pt-4",
+        "shadow-[0_1px_2px_rgba(16,24,40,0.04),0_4px_16px_-4px_rgba(16,24,40,0.08)]",
+        "transition-all duration-200 ease-out",
+        "hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(16,24,40,0.06),0_12px_28px_-6px_rgba(16,24,40,0.16)]",
         isCurrentUser
-          ? "border-primary shadow-primary/20 shadow-md"
-          : "border-border hover:border-primary/40"
+          ? "border-primary/40 ring-2 ring-primary/30"
+          : "border-border hover:border-primary/30",
+        deceased && "bg-muted/30"
       )}
     >
-      {/* Target handle (top) */}
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-primary !border-2 !border-white"
+        className="!top-0 !left-1/2 !-translate-x-1/2"
       />
 
-      {/* Photo area */}
-      <div
-        className={cn(
-          "relative h-[120px] overflow-hidden",
-          deceased
-            ? "bg-gradient-to-b from-gray-200 to-gray-100"
-            : "bg-gradient-to-b from-amber-100 to-orange-50"
-        )}
-      >
-        {hasPhotos ? (
-          <>
+      {/* Avatar */}
+      <div className="flex justify-center">
+        <div
+          className={cn(
+            "relative h-16 w-16 overflow-hidden rounded-full ring-4 ring-white",
+            "shadow-[0_2px_8px_rgba(16,24,40,0.12)]",
+            deceased && "grayscale"
+          )}
+        >
+          {photo ? (
             <Image
-              src={person.photos[photoIdx].url}
+              src={photo.url}
               alt={`${person.firstName} ${person.lastName}`}
               fill
               className="object-cover"
-              sizes="200px"
+              sizes="64px"
             />
-            {person.photos.length > 1 && (
-              <>
-                <button
-                  onClick={handlePrevPhoto}
-                  className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-0.5 transition-colors"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={handleNextPhoto}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-0.5 transition-colors"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
-                  {person.photos.map((_, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "w-1.5 h-1.5 rounded-full bg-white transition-opacity",
-                        i === photoIdx ? "opacity-100" : "opacity-50"
-                      )}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span
+          ) : (
+            <div
               className={cn(
-                "text-3xl font-bold",
-                deceased ? "text-gray-400" : "text-primary/70"
+                "flex h-full w-full items-center justify-center text-lg font-semibold",
+                deceased
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-gradient-to-br from-primary/15 to-primary/5 text-primary"
               )}
             >
               {getInitials(person)}
-            </span>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Audio badge */}
         {hasAudio && (
-          <div className="absolute top-2 right-2 bg-primary text-white rounded-full p-1 shadow-sm">
-            <Volume2 className="w-3 h-3" />
+          <div className="absolute right-6 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-white">
+            <Volume2 className="h-2.5 w-2.5" />
           </div>
         )}
 
-        {/* Deceased overlay */}
+        {/* Deceased marker */}
         {deceased && (
-          <div className="absolute inset-0 bg-gray-900/10" />
+          <div className="absolute left-6 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground ring-2 ring-white">
+            <span className="text-[11px] leading-none">†</span>
+          </div>
         )}
       </div>
 
-      {/* Info area */}
-      <div className="p-3 space-y-1">
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                "font-semibold text-sm leading-tight truncate",
-                deceased ? "text-gray-500" : "text-foreground"
-              )}
-            >
-              {person.firstName}
-            </p>
-            <p
-              className={cn(
-                "font-bold text-sm leading-tight truncate",
-                deceased ? "text-gray-600" : "text-primary"
-              )}
-            >
-              {person.lastName}
-            </p>
-          </div>
-          {isAuthenticated && (
-            <button
-              onClick={handleEdit}
-              className="flex-shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Edit className="w-3 h-3" />
-            </button>
+      {/* Name */}
+      <div className="mt-2.5 text-center">
+        <p
+          className={cn(
+            "truncate text-[13px] font-semibold leading-tight",
+            deceased ? "text-muted-foreground" : "text-foreground"
           )}
-        </div>
-
+        >
+          {person.firstName}
+        </p>
+        <p
+          className={cn(
+            "truncate text-[13px] font-semibold leading-tight",
+            deceased ? "text-muted-foreground" : "text-primary"
+          )}
+        >
+          {person.lastName}
+        </p>
         {person.nicknames && person.nicknames.length > 0 && (
-          <p className="text-xs text-muted-foreground italic truncate">
-            &ldquo;{person.nicknames[0]}&rdquo;
+          <p className="mt-0.5 truncate text-[11px] italic text-muted-foreground">
+            « {person.nicknames[0]} »
           </p>
-        )}
-
-        {/* Dates */}
-        <div className="space-y-0.5">
-          {person.birthDate && (
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">●</span>{" "}
-              {formatDateShort(person.birthDate)}
-            </p>
-          )}
-          {person.deathDate && (
-            <p className="text-xs text-muted-foreground">
-              <span className="text-gray-400">†</span>{" "}
-              {formatDateShort(person.deathDate)}
-            </p>
-          )}
-        </div>
-
-        {/* City */}
-        {person.cityOfOrigin && (
-          <p className="text-xs text-muted-foreground/70 truncate">
-            📍 {person.cityOfOrigin}
-          </p>
-        )}
-
-        {/* Current user badge */}
-        {isCurrentUser && (
-          <div className="mt-1.5 px-2 py-0.5 bg-primary/10 rounded-full">
-            <p className="text-xs text-primary font-medium text-center">Vous</p>
-          </div>
         )}
       </div>
 
-      {/* Source handle (bottom) */}
+      {/* Meta */}
+      <div className="mt-1.5 space-y-0.5 text-center">
+        {lifespan && (
+          <p className="text-[11px] font-medium text-muted-foreground">{lifespan}</p>
+        )}
+        {person.cityOfOrigin && (
+          <p className="flex items-center justify-center gap-0.5 truncate text-[11px] text-muted-foreground/80">
+            <MapPin className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{person.cityOfOrigin}</span>
+          </p>
+        )}
+      </div>
+
+      {isCurrentUser && (
+        <div className="mx-auto mt-2 w-fit rounded-full bg-primary/10 px-2 py-0.5">
+          <p className="text-[10px] font-semibold text-primary">Vous</p>
+        </div>
+      )}
+
+      {/* Edit button (hover, auth only) */}
+      {isAuthenticated && (
+        <button
+          onClick={handleEdit}
+          className={cn(
+            "absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-lg",
+            "bg-white/90 text-muted-foreground shadow-sm ring-1 ring-border",
+            "opacity-0 transition-all duration-150 hover:bg-accent hover:text-primary",
+            "group-hover/card:opacity-100"
+          )}
+          aria-label="Modifier"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      )}
+
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-3 !h-3 !bg-primary !border-2 !border-white"
+        className="!bottom-0 !left-1/2 !-translate-x-1/2"
       />
     </div>
   );

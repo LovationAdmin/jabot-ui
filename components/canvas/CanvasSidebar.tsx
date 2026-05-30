@@ -98,8 +98,8 @@ function PersonListItem({
         className={cn(
           "w-10 h-10 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-sm font-bold",
           deceased
-            ? "bg-gray-100 text-gray-400"
-            : "bg-gradient-to-br from-amber-100 to-orange-200 text-primary"
+            ? "bg-muted text-muted-foreground"
+            : "bg-gradient-to-br from-primary/15 to-primary/5 text-primary"
         )}
       >
         {person.photos.length > 0 ? (
@@ -238,7 +238,7 @@ export function CanvasSidebar() {
   }
 
   return (
-    <div className="h-full w-[280px] border-r bg-white flex flex-col flex-shrink-0">
+    <div className="h-full w-[280px] border-r bg-card flex flex-col flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
         <h2 className="font-semibold text-sm text-foreground">

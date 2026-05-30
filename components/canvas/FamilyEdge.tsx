@@ -7,24 +7,19 @@ import {
   EdgeLabelRenderer,
   BaseEdge,
 } from "reactflow";
-import { cn } from "@/lib/utils";
 
 interface FamilyEdgeData {
   type: "parent" | "child" | "sibling" | "spouse";
 }
 
-const edgeStyles: Record<string, { stroke: string; strokeDasharray?: string }> = {
-  parent: { stroke: "hsl(28, 80%, 45%)" },
-  child: { stroke: "hsl(28, 80%, 45%)" },
-  sibling: { stroke: "hsl(210, 60%, 50%)", strokeDasharray: "5,3" },
-  spouse: { stroke: "hsl(340, 60%, 50%)" },
-};
-
-const edgeLabels: Record<string, string> = {
-  parent: "",
-  child: "",
-  sibling: "",
-  spouse: "♥",
+const edgeStyles: Record<
+  string,
+  { stroke: string; dash?: string; width: number; opacity: number }
+> = {
+  parent: { stroke: "hsl(var(--rel-parent))", width: 2, opacity: 0.55 },
+  child: { stroke: "hsl(var(--rel-parent))", width: 2, opacity: 0.55 },
+  sibling: { stroke: "hsl(var(--rel-sibling))", dash: "1,7", width: 2.5, opacity: 0.6 },
+  spouse: { stroke: "hsl(var(--rel-spouse))", width: 2, opacity: 0.65 },
 };
 
 function FamilyEdgeComponent({
@@ -38,6 +33,9 @@ function FamilyEdgeComponent({
   data,
   markerEnd,
 }: EdgeProps<FamilyEdgeData>) {
+  const relType = data?.type || "parent";
+  const style = edgeStyles[relType] || edgeStyles.parent;
+
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -45,12 +43,8 @@ function FamilyEdgeComponent({
     targetX,
     targetY,
     targetPosition,
-    curvature: 0.3,
+    curvature: relType === "spouse" ? 0.15 : 0.4,
   });
-
-  const relType = data?.type || "parent";
-  const style = edgeStyles[relType] || edgeStyles.parent;
-  const label = edgeLabels[relType];
 
   return (
     <>
@@ -60,12 +54,13 @@ function FamilyEdgeComponent({
         markerEnd={markerEnd}
         style={{
           stroke: style.stroke,
-          strokeWidth: relType === "spouse" ? 2 : 1.5,
-          strokeDasharray: style.strokeDasharray,
-          opacity: 0.7,
+          strokeWidth: style.width,
+          strokeDasharray: style.dash,
+          strokeLinecap: "round",
+          opacity: style.opacity,
         }}
       />
-      {label && (
+      {relType === "spouse" && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -73,12 +68,9 @@ function FamilyEdgeComponent({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "none",
             }}
-            className={cn(
-              "text-sm font-bold",
-              relType === "spouse" ? "text-rose-500" : "text-primary"
-            )}
+            className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] shadow-sm ring-1 ring-rose-200"
           >
-            {label}
+            <span className="text-rose-500">♥</span>
           </div>
         </EdgeLabelRenderer>
       )}
