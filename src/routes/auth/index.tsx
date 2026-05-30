@@ -32,7 +32,7 @@ function AuthPage() {
       setStep("otp");
       if (result.devCode) setDevCode(result.devCode);
     } catch {
-      setError("Impossible d'envoyer le code. Vérifiez votre numéro.");
+      setError("Impossible d'envoyer le code. Verifiez votre numero.");
     } finally {
       setIsLoading(false);
     }
@@ -44,11 +44,11 @@ function AuthPage() {
     setError(null);
     try {
       const result = await authApi.verifyOtp(phone, otpInput);
-      login(result.token, result.userId, phone);
+      login(result.token, result.userId, phone, { personId: result.personId, onboarded: result.onboarded });
       setStep("success");
       setTimeout(() => navigate({ to: "/" }), 1500);
     } catch {
-      setError("Code incorrect. Vérifiez et réessayez.");
+      setError("Code incorrect. Verifiez et reessayez.");
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +62,7 @@ function AuthPage() {
           className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          Retour à l'arbre
+          Retour a l'arbre
         </Link>
 
         <div className="rounded-2xl border border-border bg-card p-8 shadow-float">
@@ -76,15 +76,15 @@ function AuthPage() {
           {step === "phone" && (
             <>
               <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Connexion</h1>
+                <h1 className="font-serif text-2xl text-foreground">Presenter ma famille</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Entrez votre numéro pour recevoir un code
+                  Entrez votre numero pour recevoir un code
                 </p>
               </div>
               <form onSubmit={handlePhoneSubmit} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-foreground">
-                    Numéro de téléphone
+                    Numero de telephone
                   </label>
                   <input
                     type="tel"
@@ -110,9 +110,9 @@ function AuthPage() {
           {step === "otp" && (
             <>
               <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Vérification</h1>
+                <h1 className="font-serif text-2xl text-foreground">Verification</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Code envoyé au{" "}
+                  Code envoye au{" "}
                   <span className="font-medium text-foreground">{phone}</span>
                 </p>
                 {devCode && (
@@ -125,7 +125,7 @@ function AuthPage() {
               <form onSubmit={handleOtpSubmit} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-foreground">
-                    Code à 6 chiffres
+                    Code a 6 chiffres
                   </label>
                   <input
                     type="text"
@@ -145,14 +145,14 @@ function AuthPage() {
                   disabled={isLoading || otpInput.length < 6}
                   className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {isLoading ? "Vérification…" : "Valider"}
+                  {isLoading ? "Verification…" : "Valider"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep("phone")}
                   className="w-full text-sm text-muted-foreground hover:text-foreground"
                 >
-                  Modifier le numéro
+                  Modifier le numero
                 </button>
               </form>
             </>
@@ -161,7 +161,7 @@ function AuthPage() {
           {step === "success" && (
             <div className="py-4 text-center">
               <CheckCircle className="mx-auto mb-3 size-16 text-green-500" />
-              <h1 className="font-serif text-2xl text-foreground">Connexion réussie !</h1>
+              <h1 className="font-serif text-2xl text-foreground">Connexion reussie !</h1>
               <p className="mt-1 text-sm text-muted-foreground">Redirection en cours…</p>
             </div>
           )}
