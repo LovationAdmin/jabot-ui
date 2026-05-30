@@ -1,13 +1,14 @@
 import { Person } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil } from "lucide-react";
 
 interface EditPanelProps {
   person: Person | null;
   onClose: () => void;
   isAuthenticated?: boolean;
+  onEdit?: (person: Person) => void;
 }
 
-export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) {
+export function EditPanel({ person, onClose, isAuthenticated, onEdit }: EditPanelProps) {
   if (!person) return null;
 
   const fullName = [person.firstName, person.lastName].filter(Boolean).join(" ");
@@ -42,7 +43,7 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
         <div className="mb-5 text-center">
           <h3 className="font-display text-2xl font-bold text-foreground">{fullName}</h3>
           {person.nicknames && person.nicknames.length > 0 && (
-            <p className="mt-0.5 text-sm text-primary/80">« {person.nicknames.join(", ")} »</p>
+            <p className="mt-0.5 text-sm text-primary/80">« {person.nicknames.join(", ")} »</p>
           )}
         </div>
 
@@ -96,8 +97,11 @@ export function EditPanel({ person, onClose, isAuthenticated }: EditPanelProps) 
       {/* Actions */}
       {isAuthenticated && (
         <div className="border-t border-border/60 p-4">
-          <button className="brand-gradient w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90">
-            Modifier
+          <button
+            onClick={() => onEdit?.(person)}
+            className="brand-gradient flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            <Pencil className="size-4" /> Modifier
           </button>
         </div>
       )}

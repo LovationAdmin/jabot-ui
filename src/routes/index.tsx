@@ -5,10 +5,12 @@ import { PersonCard } from "@/components/tree/PersonCard";
 import { EditPanel } from "@/components/tree/EditPanel";
 import { Toolbar } from "@/components/tree/Toolbar";
 import { MiniMap } from "@/components/tree/MiniMap";
+import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
+import { AccountMenu } from "@/components/tree/AccountMenu";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { Person } from "@/lib/types";
-import { LogIn, TreePine } from "lucide-react";
+import { LogIn, TreePine, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,12 +24,15 @@ export const Route = createFileRoute("/")({
 
 const WORLD = { w: 3000, h: 2000 };
 
+type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
+
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, loadTree } = useFamilyTreeStore();
-  const { isAuthenticated, onboarded, phone, logout } = useAuthStore();
+  const { tree, isLoading, loadTree, getPersonById } = useFamilyTreeStore();
+  const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
@@ -104,6 +109,11 @@ function JabotCanvas() {
 
   const selected: Person | null = tree.persons.find((p) => p.id === selectedId) ?? null;
 
+  const editMyCard = () => {
+    const me = personId ? getPersonById(personId) : undefined;
+    if (me) setForm({ mode: "edit", person: me });
+  };
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-canvas text-foreground">
       {/* Header */}
@@ -116,15 +126,16 @@ function JabotCanvas() {
         </div>
         <div className="flex items-center gap-2">
           {isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-muted-foreground sm:block">{phone}</span>
+            <>
               <button
-                onClick={logout}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setForm({ mode: "create" })}
+                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Deconnexion
+                <Plus className="size-4" />
+                <span className="hidden sm:block">Ajouter</span>
               </button>
-            </div>
+              <AccountMenu onEditMyCard={editMyCard} />
+            </>
           ) : (
             <button
               onClick={() => navigate({ to: "/auth" })}
@@ -164,10 +175,17 @@ function JabotCanvas() {
                 <h2 className="font-serif text-2xl text-foreground">L'arbre est encore vide</h2>
                 <p className="max-w-xs text-sm text-muted-foreground">
                   {isAuthenticated
-                    ? "Completez votre fiche pour demarrer l'arbre genealogique."
+                    ? "Ajoutez des personnes pour demarrer l'arbre genealogique."
                     : "Connectez-vous pour vous ajouter et presenter votre famille."}
                 </p>
-                {!isAuthenticated && (
+                {isAuthenticated ? (
+                  <button
+                    onClick={() => setForm({ mode: "create" })}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <Plus className="size-4" /> Ajouter une personne
+                  </button>
+                ) : (
                   <button
                     onClick={() => navigate({ to: "/auth" })}
                     className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -209,10 +227,16 @@ function JabotCanvas() {
           )}
         </div>
 
-        <EditPanel person={selected} onClose={() => setSelectedId(null)} isAuthenticated={isAuthenticated} />
+        <EditPanel
+          person={selected}
+          onClose={() => setSelectedId(null)}
+          isAuthenticated={isAuthenticated}
+          onEdit={(p) => setForm({ mode: "edit", person: p })}
+        />
       </main>
 
       {showOnboarding && <OnboardingDialog />}
+      {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
     </div>
   );
 }
