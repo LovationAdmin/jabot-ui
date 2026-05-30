@@ -31,7 +31,6 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: "jabot-auth",
       partialize: (state) => ({ isAuthenticated: state.isAuthenticated, userId: state.userId, phone: state.phone, token: state.token }),
-      skipHydration: true,
     },
   ),
 );

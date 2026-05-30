@@ -10,12 +10,6 @@ import { Person } from "@/lib/types";
 import { LogIn, Plus, TreePine } from "lucide-react";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Jabot — Arbre généalogique" },
-      { name: "description", content: "Votre arbre généalogique africain sur un canvas infini." },
-    ],
-  }),
   component: JabotCanvas,
 });
 
@@ -114,17 +108,11 @@ function JabotCanvas() {
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
               <span className="hidden text-xs text-muted-foreground sm:block">{phone}</span>
-              <button
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                onClick={() => { /* TODO: add person dialog */ }}
-              >
+              <button className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
                 <Plus className="size-3.5" />
                 Ajouter
               </button>
-              <button
-                onClick={logout}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={logout} className="text-xs text-muted-foreground hover:text-foreground">
                 Déconnexion
               </button>
             </div>
@@ -149,7 +137,6 @@ function JabotCanvas() {
           onClick={(e) => { if (!(e.target as HTMLElement).closest("[data-card]")) setSelectedId(null); }}
           className="canvas-grid relative flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
         >
-          {/* Loading */}
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
@@ -159,7 +146,6 @@ function JabotCanvas() {
             </div>
           )}
 
-          {/* Empty state */}
           {!isLoading && tree.persons.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-4 text-center">
@@ -186,7 +172,6 @@ function JabotCanvas() {
             </div>
           )}
 
-          {/* World */}
           {!isLoading && tree.persons.length > 0 && (
             <div
               style={{

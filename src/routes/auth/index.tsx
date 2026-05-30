@@ -5,7 +5,6 @@ import { authApi } from "@/lib/api";
 import { ArrowLeft, CheckCircle } from "lucide-react";
 
 export const Route = createFileRoute("/auth/")({
-  head: () => ({ meta: [{ title: "Connexion — Jabot" }] }),
   component: AuthPage,
 });
 
