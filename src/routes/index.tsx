@@ -5,6 +5,7 @@ import { PersonCard } from "@/components/tree/PersonCard";
 import { EditPanel } from "@/components/tree/EditPanel";
 import { Toolbar } from "@/components/tree/Toolbar";
 import { MiniMap } from "@/components/tree/MiniMap";
+import { AddPersonDialog } from "@/components/tree/AddPersonDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { Person } from "@/lib/types";
 import { LogIn, Plus, TreePine } from "lucide-react";
@@ -30,6 +31,7 @@ function JabotCanvas() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
@@ -116,7 +118,7 @@ function JabotCanvas() {
               <span className="hidden text-xs text-muted-foreground sm:block">{phone}</span>
               <button
                 className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                onClick={() => { /* TODO: add person dialog */ }}
+                onClick={() => setAddDialogOpen(true)}
               >
                 <Plus className="size-3.5" />
                 Ajouter
@@ -171,7 +173,10 @@ function JabotCanvas() {
                     : "Connectez-vous pour créer et modifier votre arbre généalogique."}
                 </p>
                 {isAuthenticated ? (
-                  <button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+                  <button
+                    onClick={() => setAddDialogOpen(true)}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
                     <Plus className="size-4" /> Ajouter une personne
                   </button>
                 ) : (
@@ -218,6 +223,11 @@ function JabotCanvas() {
 
         <EditPanel person={selected} onClose={() => setSelectedId(null)} isAuthenticated={isAuthenticated} />
       </main>
+
+      <AddPersonDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+      />
     </div>
   );
 }
