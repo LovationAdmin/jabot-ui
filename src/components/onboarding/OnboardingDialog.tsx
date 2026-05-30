@@ -14,7 +14,11 @@ const STEP_LABELS: Record<Step, string> = {
   results: "Votre fiche",
 };
 
-export function OnboardingDialog() {
+interface Props {
+  onCompleted?: (personId: string) => void;
+}
+
+export function OnboardingDialog({ onCompleted }: Props) {
   const { setOnboarded } = useAuthStore();
   const { addPerson, loadTree } = useFamilyTreeStore();
 
@@ -69,8 +73,13 @@ export function OnboardingDialog() {
     setError(null);
     try {
       const me = await authApi.linkPerson(personId);
-      if (me.personId) setOnboarded(me.personId);
-      await loadTree();
+      if (me.personId) {
+        setOnboarded(me.personId);
+        await loadTree();
+        onCompleted?.(me.personId);
+      } else {
+        await loadTree();
+      }
     } catch {
       setError("Impossible de vous rattacher a cette fiche. Reessayez.");
     } finally {
@@ -89,9 +98,11 @@ export function OnboardingDialog() {
         gender: form.gender,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
+      // addPerson met la fiche dans le store immédiatement — pas besoin de
+      // recharger tout l'arbre (l'endpoint /tree n'inclut pas les nœuds isolés).
       addPerson(created);
       setOnboarded(created.id);
-      await loadTree();
+      onCompleted?.(created.id);
     } catch {
       setError("Impossible de creer votre fiche. Reessayez.");
     } finally {

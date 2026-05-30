@@ -114,6 +114,15 @@ function JabotCanvas() {
     if (me) setForm({ mode: "edit", person: me });
   };
 
+  const centerOnPerson = (pid: string) => {
+    const p = getPersonById(pid) ?? tree.persons.find((x) => x.id === pid);
+    const wx = p?.position?.x ?? 0;
+    const wy = p?.position?.y ?? 0;
+    setZoom(1);
+    setPan({ x: viewport.w / 2 - wx - 104, y: viewport.h / 2 - wy - 50 });
+    setSelectedId(pid);
+  };
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-canvas text-foreground">
       {/* Header */}
@@ -235,7 +244,7 @@ function JabotCanvas() {
         />
       </main>
 
-      {showOnboarding && <OnboardingDialog />}
+      {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
     </div>
   );
