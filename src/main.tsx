@@ -2,7 +2,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { useAuthStore } from "./lib/store";
 import "./styles.css";
+
+// Le store auth utilise skipHydration: on relit donc explicitement le
+// localStorage au demarrage, sinon isAuthenticated/onboarded restent a false
+// et l'onboarding ne se declenche jamais apres un rechargement.
+useAuthStore.persist.rehydrate();
 
 const router = createRouter({
   routeTree,
