@@ -2,131 +2,202 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Modern, calm palette — cool neutrals + a single refined indigo accent */
-    --background: 210 25% 98%;
-    --foreground: 222 22% 16%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 22% 16%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 22% 16%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 16% 95%;
-    --secondary-foreground: 222 22% 20%;
-    --muted: 220 16% 95%;
-    --muted-foreground: 220 12% 48%;
-    --accent: 243 60% 96%;
-    --accent-foreground: 243 75% 45%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 18% 91%;
-    --input: 220 18% 91%;
-    --ring: 243 75% 59%;
-    --radius: 1rem;
+/* ─── Design tokens ────────────────────────────────────────────────────────── */
+:root {
+  --radius: 0.75rem;
 
-    /* Relationship colors */
-    --rel-parent: 243 75% 62%;
-    --rel-sibling: 199 89% 52%;
-    --rel-spouse: 340 75% 60%;
-  }
+  /* Warm archival amber palette (OKLCH) */
+  --background: oklch(0.985 0.005 80);
+  --foreground: oklch(0.27 0.015 60);
+
+  --canvas: oklch(0.978 0.006 80);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.015 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.015 60);
+
+  --primary: oklch(0.39 0.105 55);
+  --primary-foreground: oklch(0.99 0.005 80);
+  --accent: oklch(0.39 0.105 55);
+  --accent-foreground: oklch(0.99 0.005 80);
+
+  --secondary: oklch(0.96 0.008 80);
+  --secondary-foreground: oklch(0.27 0.015 60);
+  --muted: oklch(0.96 0.008 80);
+  --muted-foreground: oklch(0.52 0.015 60);
+
+  --border: oklch(0.27 0.015 60 / 0.08);
+  --border-subtle: oklch(0.27 0.015 60 / 0.05);
+  --input: oklch(0.27 0.015 60 / 0.1);
+  --ring: oklch(0.39 0.105 55 / 0.4);
+
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Tailwind color aliases — referenced as var(--color-*) in tailwind.config.ts */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* Relationship edge colors */
+  --color-rel-parent: oklch(0.39 0.105 55);
+  --color-rel-sibling: oklch(0.6 0.18 220);
+  --color-rel-spouse: oklch(0.56 0.18 10);
+
+  /* Elevation shadows */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 4px 12px oklch(0 0 0 / 0.04);
+  --shadow-card-selected: 0 4px 24px oklch(0.35 0.09 50 / 0.18);
+  --shadow-float: 0 12px 32px -8px oklch(0 0 0 / 0.18);
+
+  /* Fonts */
+  --font-sans: "Inter";
+  --font-serif: "Instrument Serif";
 }
 
+.dark {
+  --background: oklch(0.18 0.012 60);
+  --foreground: oklch(0.96 0.005 80);
+  --canvas: oklch(0.2 0.012 60);
+  --card: oklch(0.24 0.012 60);
+  --card-foreground: oklch(0.96 0.005 80);
+  --popover: oklch(0.24 0.012 60);
+  --popover-foreground: oklch(0.96 0.005 80);
+  --primary: oklch(0.7 0.13 55);
+  --primary-foreground: oklch(0.18 0.012 60);
+  --accent: oklch(0.7 0.13 55);
+  --accent-foreground: oklch(0.18 0.012 60);
+  --secondary: oklch(0.28 0.012 60);
+  --secondary-foreground: oklch(0.96 0.005 80);
+  --muted: oklch(0.28 0.012 60);
+  --muted-foreground: oklch(0.72 0.012 60);
+  --border: oklch(1 0 0 / 0.08);
+  --border-subtle: oklch(1 0 0 / 0.05);
+  --input: oklch(1 0 0 / 0.12);
+  --ring: oklch(0.7 0.13 55 / 0.4);
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────────── */
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
+  }
+  html,
+  body {
+    height: 100%;
   }
   body {
-    @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-/* ---------- React Flow refinements ---------- */
-.react-flow__renderer {
-  @apply rounded-none;
+/* ─── Canvas grid (dot pattern) ────────────────────────────────────────────── */
+@layer utilities {
+  .canvas-grid {
+    background-image: radial-gradient(
+      oklch(0.27 0.015 60 / 0.12) 0.9px,
+      transparent 0.9px
+    );
+    background-size: 28px 28px;
+  }
+
+  .canvas-grid-mini {
+    background-image: radial-gradient(
+      oklch(0.27 0.015 60 / 0.18) 0.7px,
+      transparent 0.7px
+    );
+    background-size: 8px 8px;
+  }
+
+  /* Glass morphism */
+  .glass {
+    background: oklch(1 0 0 / 0.80);
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  }
 }
 
-/* Smooth, soft edges */
-.react-flow__edge-path {
-  stroke-linecap: round;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
-}
-
-.react-flow__edge.selected .react-flow__edge-path,
-.react-flow__edge:hover .react-flow__edge-path {
-  stroke-width: 2.5 !important;
-}
-
-/* Make connection handles subtle (almost invisible until needed) */
-.react-flow__handle {
-  width: 7px !important;
-  height: 7px !important;
-  background-color: hsl(var(--primary)) !important;
-  border: 2px solid white !important;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.react-flow__node:hover .react-flow__handle {
-  opacity: 0.6;
-}
-
-.react-flow__background {
-  background-color: hsl(var(--background));
-}
-
-/* Pane feels lighter */
+/* ─── React Flow ─────────────────────────────────────────────────────────── */
 .react-flow__attribution {
   display: none;
 }
 
-/* Smooth node movement */
-.react-flow__node {
-  transition: filter 0.2s ease;
+.react-flow__handle {
+  width: 6px !important;
+  height: 6px !important;
+  background-color: var(--color-primary) !important;
+  border: 2px solid white !important;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
-/* ---------- Custom scrollbar ---------- */
+.react-flow__node:hover .react-flow__handle {
+  opacity: 0.5;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+  transition: stroke-width 0.15s ease;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full;
+  background: var(--color-border);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/40;
+  background: var(--color-muted-foreground);
+  opacity: 0.4;
 }
 
-/* ---------- OTP input ---------- */
+/* ─── OTP input ──────────────────────────────────────────────────────────── */
 .otp-input {
-  @apply w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-xl focus:border-primary focus:outline-none transition-colors;
+  width: 3rem;
+  height: 3.5rem;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 2px solid var(--color-border);
+  border-radius: calc(var(--radius) - 2px);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.otp-input:focus {
+  border-color: var(--color-primary);
 }
 
-/* ---------- Animations ---------- */
+/* ─── Animations ─────────────────────────────────────────────────────────── */
 @keyframes pulse-audio {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.18); opacity: 0.65; }
 }
 .audio-playing {
   animation: pulse-audio 1s ease-in-out infinite;
-}
-
-@keyframes float-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.animate-float-in {
-  animation: float-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Toolbar glass effect */
-.glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }

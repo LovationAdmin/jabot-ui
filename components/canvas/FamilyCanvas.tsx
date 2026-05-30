@@ -1,25 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactFlow, {
   Node,
   Edge,
-  MiniMap,
   Background,
   BackgroundVariant,
   useNodesState,
   useEdgesState,
   ReactFlowInstance,
   Panel,
+  MiniMap,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import {
+  Plus,
+  GitBranch,
+  Undo2,
+  Redo2,
+  Upload,
+  Hand,
+} from "lucide-react";
 
-import { PersonNode } from "./PersonNode";
+import { PersonNode, CARD_W, CARD_H } from "./PersonNode";
 import { FamilyEdge } from "./FamilyEdge";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { PersonNodeData, Person } from "@/lib/types";
 import { computeTreeLayout } from "@/lib/utils";
-import { ZoomIn, ZoomOut, Maximize2, Plus, Minus } from "lucide-react";
 import { PersonSheet } from "@/components/person/PersonSheet";
 import { PersonForm } from "@/components/person/PersonForm";
 import {
@@ -32,17 +39,9 @@ import {
 const nodeTypes = { personNode: PersonNode };
 const edgeTypes = { familyEdge: FamilyEdge };
 
-// Card geometry (must match PersonNode) — used to center the viewport on a node.
-const CARD_W = 164;
-const CARD_H = 190;
-
 export default function FamilyCanvas() {
-  const {
-    tree,
-    selectedPersonId,
-    setSelectedPerson,
-    setEditingPerson,
-  } = useFamilyTreeStore();
+  const { tree, selectedPersonId, setSelectedPerson, setEditingPerson } =
+    useFamilyTreeStore();
   const { isAuthenticated, userId } = useAuthStore();
 
   const flowRef = useRef<ReactFlowInstance | null>(null);
@@ -52,7 +51,7 @@ export default function FamilyCanvas() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editPerson, setEditPersonState] = useState<Person | null>(null);
-  const [zoom, setZoom] = useState(0.7);
+  const [zoom, setZoom] = useState(0.8);
 
   const buildNodes = useCallback(
     (persons: Person[]): Node<PersonNodeData>[] => {
@@ -83,22 +82,23 @@ export default function FamilyCanvas() {
     [tree.relationships, isAuthenticated, userId, setSelectedPerson, setEditingPerson]
   );
 
-  const buildEdges = useCallback((): Edge[] => {
-    return tree.relationships.map((rel) => ({
-      id: rel.id,
-      source: rel.personAId,
-      target: rel.personBId,
-      type: "familyEdge",
-      data: { type: rel.type },
-    }));
-  }, [tree.relationships]);
+  const buildEdges = useCallback(
+    (): Edge[] =>
+      tree.relationships.map((rel) => ({
+        id: rel.id,
+        source: rel.personAId,
+        target: rel.personBId,
+        type: "familyEdge",
+        data: { type: rel.type },
+      })),
+    [tree.relationships]
+  );
 
   useEffect(() => {
     setNodes(buildNodes(tree.persons));
     setEdges(buildEdges());
   }, [tree, buildNodes, buildEdges, setNodes, setEdges]);
 
-  // Smoothly recenter on the selected person
   useEffect(() => {
     if (selectedPersonId && flowRef.current) {
       const node = nodes.find((n) => n.id === selectedPersonId);
@@ -106,26 +106,18 @@ export default function FamilyCanvas() {
         flowRef.current.setCenter(
           node.position.x + CARD_W / 2,
           node.position.y + CARD_H / 2,
-          { zoom: 1.1, duration: 700 }
+          { zoom: 1.1, duration: 650 }
         );
       }
     }
   }, [selectedPersonId, nodes]);
 
-  const handlePaneClick = useCallback(() => setSelectedPerson(null), [setSelectedPerson]);
-  const handleFitView = useCallback(
+  const handleReset = useCallback(
     () => flowRef.current?.fitView({ padding: 0.2, duration: 600 }),
     []
   );
-  const handleZoomIn = useCallback(() => flowRef.current?.zoomIn({ duration: 250 }), []);
-  const handleZoomOut = useCallback(() => flowRef.current?.zoomOut({ duration: 250 }), []);
-
-  const handleAddPerson = useCallback(() => {
-    setEditPersonState(null);
-    setEditOpen(true);
-  }, []);
-
-  const zoomPct = Math.round(zoom * 100);
+  const handleZoomIn = useCallback(() => flowRef.current?.zoomIn({ duration: 200 }), []);
+  const handleZoomOut = useCallback(() => flowRef.current?.zoomOut({ duration: 200 }), []);
 
   return (
     <div className="relative flex-1">
@@ -134,7 +126,7 @@ export default function FamilyCanvas() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onPaneClick={handlePaneClick}
+        onPaneClick={() => setSelectedPerson(null)}
         onMove={(_, vp) => setZoom(vp.zoom)}
         onInit={(instance) => {
           flowRef.current = instance;
@@ -145,74 +137,80 @@ export default function FamilyCanvas() {
         fitView
         minZoom={0.15}
         maxZoom={2.5}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
         proOptions={{ hideAttribution: true }}
-        elevateNodesOnSelect
-        nodesConnectable={false}
         panOnScroll
-        selectionOnDrag={false}
         zoomOnDoubleClick
+        nodesConnectable={false}
+        elevateNodesOnSelect
       >
+        {/* Dot grid — matches canvas-grid utility */}
         <Background
           variant={BackgroundVariant.Dots}
           gap={28}
-          size={1.4}
-          color="hsl(220, 14%, 88%)"
+          size={0.9}
+          color="oklch(0.27 0.015 60 / 0.12)"
+          className="!bg-canvas"
         />
 
-        {/* ---------- Floating top toolbar (Excalidraw-style) ---------- */}
-        <Panel position="top-center" className="!m-0 mt-4">
-          <div className="glass animate-float-in flex items-center gap-1 rounded-2xl border border-white/60 p-1.5 shadow-lg">
-            <ToolbarButton onClick={handleZoomOut} label="Dézoomer">
-              <Minus className="h-4 w-4" />
-            </ToolbarButton>
-            <button
-              onClick={handleFitView}
-              className="min-w-[52px] rounded-lg px-2 py-1.5 text-xs font-semibold text-foreground/70 transition-colors hover:bg-accent hover:text-primary"
-            >
-              {zoomPct}%
-            </button>
-            <ToolbarButton onClick={handleZoomIn} label="Zoomer">
-              <Plus className="h-4 w-4" />
-            </ToolbarButton>
-
-            <div className="mx-1 h-5 w-px bg-border" />
-
-            <ToolbarButton onClick={handleFitView} label="Recentrer">
-              <Maximize2 className="h-4 w-4" />
-            </ToolbarButton>
+        {/* ── Bottom pill toolbar ──────────────────────────────────────── */}
+        <Panel position="bottom-center" className="!mb-6 !mx-0 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card/90 p-1.5 shadow-float backdrop-blur-xl">
 
             {isAuthenticated && (
               <>
-                <div className="mx-1 h-5 w-px bg-border" />
                 <button
-                  onClick={handleAddPerson}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:brightness-110 active:scale-95"
+                  onClick={() => { setEditPersonState(null); setEditOpen(true); }}
+                  className="flex h-9 items-center gap-2 rounded-full pl-2 pr-3 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <span className="grid size-6 place-items-center rounded-full bg-accent text-accent-foreground">
+                    <Plus className="size-3.5" strokeWidth={2.5} />
+                  </span>
                   Ajouter
                 </button>
+                <Divider />
+                <ToolBtn label="Ajouter une relation"><GitBranch className="size-4" /></ToolBtn>
+                <ToolBtn label="Importer GEDCOM"><Upload className="size-4" /></ToolBtn>
+                <Divider />
+                <ToolBtn label="Annuler"><Undo2 className="size-4" /></ToolBtn>
+                <ToolBtn label="Rétablir"><Redo2 className="size-4" /></ToolBtn>
+                <Divider />
               </>
             )}
+
+            <ToolBtn label="Recentrer" onClick={handleReset}>
+              <Hand className="size-4" />
+            </ToolBtn>
+
+            <div className="flex items-center">
+              <button
+                onClick={handleZoomOut}
+                aria-label="Zoom arrière"
+                className="grid size-9 place-items-center rounded-full text-foreground/70 transition-colors hover:bg-muted"
+              >
+                −
+              </button>
+              <span className="w-12 text-center font-mono text-xs tabular-nums text-muted-foreground">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                aria-label="Zoom avant"
+                className="grid size-9 place-items-center rounded-full text-foreground/70 transition-colors hover:bg-muted"
+              >
+                +
+              </button>
+            </div>
           </div>
         </Panel>
 
-        {/* ---------- Compact legend ---------- */}
-        <Panel position="bottom-left" className="m-4">
-          <div className="glass flex items-center gap-3 rounded-xl border border-white/60 px-3 py-2 text-[11px] shadow-sm">
-            <LegendItem color="hsl(var(--rel-parent))" label="Parent / Enfant" />
-            <LegendItem color="hsl(var(--rel-sibling))" label="Fratrie" dashed />
-            <LegendItem color="hsl(var(--rel-spouse))" label="Conjoint(e)" />
-          </div>
-        </Panel>
-
+        {/* Empty state */}
         {nodes.length === 0 && (
-          <Panel position="top-center" className="mt-28">
-            <div className="animate-float-in rounded-2xl border bg-card/90 p-8 text-center shadow-sm backdrop-blur-sm">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-2xl">
+          <Panel position="top-center" className="mt-24">
+            <div className="animate-float-in rounded-2xl border bg-card/90 p-8 text-center shadow-card backdrop-blur-sm">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-2xl">
                 🌳
               </div>
-              <h3 className="text-lg font-semibold">Arbre vide</h3>
+              <h3 className="font-serif text-lg text-card-foreground">Arbre vide</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Aucune personne pour le moment.
               </p>
@@ -222,19 +220,20 @@ export default function FamilyCanvas() {
 
         <MiniMap
           nodeColor={(node) => {
-            const data = node.data as PersonNodeData;
-            if (data?.isCurrentUser) return "hsl(243, 75%, 59%)";
-            if (data?.isDeceased) return "hsl(220, 10%, 75%)";
-            return "hsl(243, 50%, 80%)";
+            const d = node.data as PersonNodeData;
+            if (d?.isCurrentUser) return "var(--color-accent)";
+            if (d?.isDeceased) return "oklch(0.7 0 0)";
+            return "oklch(0.85 0.04 55)";
           }}
-          nodeBorderRadius={12}
-          className="!rounded-xl !border !border-border !bg-white/70 !shadow-sm"
-          maskColor="rgba(120,130,150,0.06)"
+          nodeBorderRadius={10}
+          className="!rounded-xl !border !border-border !bg-card/80 !shadow-card"
+          maskColor="oklch(0.27 0.015 60 / 0.04)"
           pannable
           zoomable
         />
       </ReactFlow>
 
+      {/* Detail sheet */}
       {detailPerson && (
         <PersonSheet
           person={detailPerson}
@@ -253,6 +252,7 @@ export default function FamilyCanvas() {
         />
       )}
 
+      {/* Edit / create sheet */}
       <Sheet
         open={editOpen}
         onOpenChange={(open) => {
@@ -284,46 +284,27 @@ export default function FamilyCanvas() {
   );
 }
 
-function ToolbarButton({
-  onClick,
-  label,
+function Divider() {
+  return <span className="mx-1 h-5 w-px bg-border" />;
+}
+
+function ToolBtn({
   children,
+  label,
+  onClick,
 }: {
-  onClick: () => void;
-  label: string;
   children: React.ReactNode;
+  label: string;
+  onClick?: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-all hover:bg-accent hover:text-primary active:scale-90"
+      className="grid size-9 place-items-center rounded-full text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
     >
       {children}
     </button>
-  );
-}
-
-function LegendItem({
-  color,
-  label,
-  dashed,
-}: {
-  color: string;
-  label: string;
-  dashed?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className="block h-0.5 w-4 rounded-full"
-        style={{
-          backgroundColor: dashed ? "transparent" : color,
-          borderTop: dashed ? `2px dotted ${color}` : undefined,
-        }}
-      />
-      <span className="whitespace-nowrap text-muted-foreground">{label}</span>
-    </div>
   );
 }

@@ -16,10 +16,10 @@ const edgeStyles: Record<
   string,
   { stroke: string; dash?: string; width: number; opacity: number }
 > = {
-  parent: { stroke: "hsl(var(--rel-parent))", width: 2, opacity: 0.55 },
-  child: { stroke: "hsl(var(--rel-parent))", width: 2, opacity: 0.55 },
-  sibling: { stroke: "hsl(var(--rel-sibling))", dash: "1,7", width: 2.5, opacity: 0.6 },
-  spouse: { stroke: "hsl(var(--rel-spouse))", width: 2, opacity: 0.65 },
+  parent: { stroke: "var(--color-rel-parent)", width: 1.5, opacity: 0.5 },
+  child: { stroke: "var(--color-rel-parent)", width: 1.5, opacity: 0.5 },
+  sibling: { stroke: "var(--color-rel-sibling)", dash: "1,6", width: 2, opacity: 0.55 },
+  spouse: { stroke: "var(--color-rel-spouse)", width: 1.5, opacity: 0.6 },
 };
 
 function FamilyEdgeComponent({
