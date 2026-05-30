@@ -3,13 +3,31 @@ import { useState } from "react";
 import { useAuthStore } from "@/lib/store";
 import { authApi } from "@/lib/api";
 import { ArrowLeft, CheckCircle } from "lucide-react";
+import axios from "axios";
 
-export const Route = createFileRoute("/auth/")({
+export const Route = createFileRoute("/auth/")({ 
   head: () => ({ meta: [{ title: "Connexion — Jabot" }] }),
   component: AuthPage,
 });
 
 type Step = "phone" | "otp" | "success";
+
+/** Strip spaces/dashes, ensure leading + */
+function normalizePhone(raw: string): string {
+  const stripped = raw.replace(/[\s\-]/g, "");
+  return stripped.startsWith("+") ? stripped : "+" + stripped;
+}
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+    if (err.response?.status === 0 || !err.response) return "Impossible de joindre le serveur. Verifiez votre connexion.";
+    return `Erreur ${err.response.status} : ${err.message}`;
+  }
+  return fallback;
+}
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -26,13 +44,14 @@ function AuthPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    const normalized = normalizePhone(phoneInput);
     try {
-      const result = await authApi.requestOtp(phoneInput);
-      setPhone(phoneInput);
+      const result = await authApi.requestOtp(normalized);
+      setPhone(normalized);
       setStep("otp");
       if (result.devCode) setDevCode(result.devCode);
-    } catch {
-      setError("Impossible d'envoyer le code. Verifiez votre numero.");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Impossible d'envoyer le code. Verifiez votre numero."));
     } finally {
       setIsLoading(false);
     }
@@ -47,8 +66,8 @@ function AuthPage() {
       login(result.token, result.userId, phone, { personId: result.personId, onboarded: result.onboarded });
       setStep("success");
       setTimeout(() => navigate({ to: "/" }), 1500);
-    } catch {
-      setError("Code incorrect. Verifiez et reessayez.");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Code incorrect. Verifiez et reessayez."));
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +114,11 @@ function AuthPage() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && (
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -139,7 +162,11 @@ function AuthPage() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && (
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
                 <button
                   type="submit"
                   disabled={isLoading || otpInput.length < 6}
