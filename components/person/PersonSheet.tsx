@@ -159,7 +159,7 @@ export function PersonSheet({
                   "h-24 rounded-xl flex items-center justify-center text-4xl font-bold",
                   deceased
                     ? "bg-gray-100 text-gray-400"
-                    : "bg-gradient-to-br from-amber-100 to-orange-100 text-primary"
+                    : "bg-secondary text-primary"
                 )}
               >
                 {getInitials(person)}

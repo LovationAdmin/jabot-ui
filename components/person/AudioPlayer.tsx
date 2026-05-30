@@ -112,7 +112,7 @@ export function AudioPlayer({ audio, compact = false }: AudioPlayerProps) {
   }
 
   return (
-    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border rounded-xl p-4 space-y-3">
+    <div className="bg-secondary border rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
           <Volume2 className={cn("w-5 h-5 text-primary", isPlaying && "audio-playing")} />

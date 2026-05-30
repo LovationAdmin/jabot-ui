@@ -6,7 +6,7 @@ import { PhoneInput } from "@/components/auth/PhoneInput";
 import { OtpInput } from "@/components/auth/OtpInput";
 import { useAuthStore } from "@/lib/store";
 import { authApi } from "@/lib/api";
-import { Trees, ArrowLeft, CheckCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -74,23 +74,8 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 flex items-center justify-center p-4">
-      {/* Background pattern */}
-      <div className="fixed inset-0 opacity-5 pointer-events-none">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="kente" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-              <rect width="40" height="40" fill="none" />
-              <rect x="0" y="0" width="20" height="20" fill="currentColor" className="text-amber-600" />
-              <rect x="20" y="20" width="20" height="20" fill="currentColor" className="text-amber-600" />
-              <rect x="10" y="10" width="20" height="20" fill="currentColor" className="text-orange-500" opacity="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#kente)" />
-        </svg>
-      </div>
-
-      <div className="relative w-full max-w-md">
+    <div className="canvas-grid bg-canvas min-h-screen flex items-center justify-center p-4">
+      <div className="relative w-full max-w-md animate-float-in">
         {/* Back button */}
         <Button variant="ghost" size="sm" className="mb-6 text-muted-foreground" asChild>
           <Link href="/">
@@ -99,17 +84,19 @@ export default function AuthPage() {
           </Link>
         </Button>
 
-        <div className="bg-white rounded-2xl shadow-xl border p-8 space-y-6">
+        <div className="bg-card rounded-2xl shadow-float border p-8 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Trees className="w-8 h-8 text-primary" />
-              <span className="font-bold text-2xl text-foreground">Jabot</span>
+            <div className="flex items-center justify-center gap-2.5 mb-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary text-lg">
+                🌳
+              </div>
+              <span className="font-serif text-3xl text-foreground">Jabot</span>
             </div>
 
             {step === "phone" && (
               <>
-                <h1 className="text-2xl font-bold text-foreground">Connexion</h1>
+                <h1 className="font-serif text-2xl text-foreground">Connexion</h1>
                 <p className="text-muted-foreground text-sm">
                   Entrez votre numéro de téléphone pour recevoir un code de vérification
                 </p>
@@ -118,7 +105,7 @@ export default function AuthPage() {
 
             {step === "otp" && (
               <>
-                <h1 className="text-2xl font-bold text-foreground">Vérification</h1>
+                <h1 className="font-serif text-2xl text-foreground">Vérification</h1>
                 <p className="text-muted-foreground text-sm">
                   Entrez le code à 6 chiffres envoyé au{" "}
                   <span className="font-medium text-foreground">{phone}</span>
@@ -131,7 +118,7 @@ export default function AuthPage() {
                 <div className="flex justify-center">
                   <CheckCircle className="w-16 h-16 text-green-500" />
                 </div>
-                <h1 className="text-2xl font-bold text-foreground">Connexion réussie !</h1>
+                <h1 className="font-serif text-2xl text-foreground">Connexion réussie !</h1>
                 <p className="text-muted-foreground text-sm">Redirection en cours...</p>
               </>
             )}

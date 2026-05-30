@@ -126,8 +126,8 @@ export function PhoneInput({ onSubmit, isLoading }: PhoneInputProps) {
       </Button>
 
       {/* Demo note */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-        <p className="text-xs text-amber-700">
+      <div className="bg-secondary border-border rounded-lg p-3">
+        <p className="text-xs text-muted-foreground">
           <strong>Mode démo :</strong> Entrez n&apos;importe quel numéro et utilisez le code{" "}
           <strong>123456</strong> pour vous connecter.
         </p>

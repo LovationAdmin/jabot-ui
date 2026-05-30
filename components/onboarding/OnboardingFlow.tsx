@@ -361,10 +361,10 @@ export function OnboardingFlow() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border overflow-hidden">
-      <div className="p-6 pb-4 bg-gradient-to-r from-amber-50 to-orange-50 border-b">
+      <div className="p-6 pb-4 bg-secondary border-b">
         <div className="flex items-center gap-3 mb-1">
           <TreePine className="w-6 h-6 text-primary" />
-          <h1 className="text-xl font-bold">Rejoindre l&apos;arbre</h1>
+          <h1 className="text-xl font-serif">Rejoindre l&apos;arbre</h1>
         </div>
         <p className="text-sm text-muted-foreground">
           Complétez ces informations pour nous aider à trouver votre position dans l&apos;arbre
@@ -811,12 +811,12 @@ export function OnboardingFlow() {
               </div>
             ) : searched ? (
               <div className="space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                  <Search className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-amber-800">
+                <div className="bg-secondary border-border rounded-lg p-4 text-center">
+                  <Search className="w-8 h-8 text-primary mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground">
                     Aucun profil trouvé
                   </p>
-                  <p className="text-xs text-amber-600 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Vous n&apos;êtes pas encore dans cet arbre généalogique
                   </p>
                 </div>

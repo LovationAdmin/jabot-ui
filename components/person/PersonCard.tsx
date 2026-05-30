@@ -41,7 +41,7 @@ export function PersonCard({
           compact ? "w-9 h-9 text-xs" : "w-12 h-12 text-sm",
           deceased
             ? "bg-gray-100 text-gray-400"
-            : "bg-gradient-to-br from-amber-100 to-orange-200 text-primary"
+            : "bg-secondary text-primary"
         )}
       >
         {person.photos.length > 0 ? (

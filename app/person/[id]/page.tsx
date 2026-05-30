@@ -75,7 +75,7 @@ export default function PersonDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-background">
+    <div className="min-h-screen canvas-grid bg-canvas">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b px-4 h-14 flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -84,7 +84,7 @@ export default function PersonDetailPage() {
         </Button>
         <div className="flex items-center gap-2">
           <Trees className="w-5 h-5 text-primary" />
-          <span className="font-semibold">Jabot</span>
+          <span className="font-serif text-lg">Jabot</span>
         </div>
         {isAuthenticated && (
           <Button size="sm" onClick={() => setIsEditing(true)}>
@@ -126,7 +126,7 @@ export default function PersonDetailPage() {
                 "h-32 rounded-2xl flex items-center justify-center text-5xl font-bold",
                 deceased
                   ? "bg-gray-100 text-gray-400"
-                  : "bg-gradient-to-br from-amber-100 to-orange-100 text-primary"
+                  : "bg-secondary text-primary"
               )}
             >
               {getInitials(person)}

@@ -58,7 +58,7 @@ export default function HomePage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-base shadow-sm">
             🌳
           </div>
-          <span className="font-bold text-lg text-foreground tracking-tight">Jabot</span>
+          <span className="font-serif text-2xl text-foreground tracking-tight">Jabot</span>
           <span className="text-muted-foreground text-sm hidden sm:block">— Arbre Généalogique</span>
         </div>
         <div className="flex items-center gap-2">
