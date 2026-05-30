@@ -36,6 +36,19 @@
   --shadow-card: 0 1px 2px oklch(0.4 0.1 280 / 0.05), 0 8px 24px oklch(0.4 0.1 280 / 0.07);
   --shadow-card-selected: 0 8px 30px oklch(0.55 0.22 280 / 0.24);
   --shadow-float: 0 16px 40px -12px oklch(0.4 0.1 280 / 0.26);
+
+  --animate-slide-in: slide-in 0.25s ease-out;
+  --animate-slide-in-reverse: slide-in-reverse 0.25s ease-out;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-reverse {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 :root {
