@@ -28,9 +28,13 @@ const FamilyCanvas = dynamic(() => import("@/components/canvas/FamilyCanvas"), {
 
 export default function HomePage() {
   const { isAuthenticated } = useAuthStore();
-  const { selectedPersonId, setSelectedPerson, getPersonById } = useFamilyTreeStore();
+  const { selectedPersonId, setSelectedPerson, getPersonById, loadTree } = useFamilyTreeStore();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedPerson, setSelectedPersonState] = useState<Person | null>(null);
+
+  useEffect(() => {
+    loadTree();
+  }, [loadTree]);
 
   useEffect(() => {
     if (selectedPersonId) {

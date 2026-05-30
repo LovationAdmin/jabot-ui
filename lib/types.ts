@@ -82,8 +82,8 @@ export interface PersonFormData {
 
 export interface SearchResult {
   person: Person;
-  matchScore: number;
-  position?: { x: number; y: number };
+  confidence: number;
+  matchReasons: string[];
 }
 
 // React Flow types

@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuthStore } from "@/lib/store";
-import { authApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,11 +10,7 @@ export function useAuth() {
   const { toast } = useToast();
 
   const handleLogout = async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      // ignore API errors on logout
-    }
+    // No server-side logout endpoint; clear the local session only.
     authStore.logout();
     toast({
       title: "Déconnexion",

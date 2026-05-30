@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Person, MediaFile } from "@/lib/types";
 import { useFamilyTreeStore } from "@/lib/store";
-import { personsApi } from "@/lib/api";
+import { mediaApi, personsApi, relationshipsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,7 +104,7 @@ export function PersonForm({
     // If person exists, upload to server
     if (person?.id) {
       try {
-        const result = await personsApi.uploadPhoto(person.id, file);
+        const result = await mediaApi.upload(person.id, "photo", file);
         setPhotos((prev) =>
           prev.map((p) =>
             p.id === tempMedia.id ? { ...p, id: result.id, url: result.url } : p
@@ -120,7 +120,7 @@ export function PersonForm({
     setPhotos((prev) => prev.filter((p) => p.id !== id));
     if (person?.id && !id.startsWith("temp_")) {
       try {
-        await personsApi.deleteMedia(person.id, id);
+        await mediaApi.delete(id);
       } catch {
         // ignore
       }
@@ -155,7 +155,7 @@ export function PersonForm({
 
     if (person?.id) {
       try {
-        const result = await personsApi.uploadAudio(person.id, file);
+        const result = await mediaApi.upload(person.id, "audio", file);
         setAudios((prev) =>
           prev.map((a) =>
             a.id === tempMedia.id
@@ -178,7 +178,7 @@ export function PersonForm({
     setAudios((prev) => prev.filter((a) => a.id !== id));
     if (person?.id && !id.startsWith("temp_")) {
       try {
-        await personsApi.deleteMedia(person.id, id);
+        await mediaApi.delete(id);
       } catch {
         // ignore
       }
@@ -238,11 +238,12 @@ export function PersonForm({
               personBId: created.id,
               type: data.relationshipType,
             };
-            await personsApi
-              .create(newPersonData)
-              .then(() => {})
-              .catch(() => {});
-            addRelationship({ ...relData, id: `rel_${Date.now()}` });
+            try {
+              const rel = await relationshipsApi.create(relData);
+              addRelationship(rel);
+            } catch {
+              addRelationship({ ...relData, id: `rel_${Date.now()}` });
+            }
           }
 
           onSuccess(created);

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { Person, Relationship, AuthState, FamilyTree } from "./types";
+import { treeApi } from "./api";
 
 // ─── Auth Store ──────────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ interface FamilyTreeStore {
   activeGenerationTab: string;
 
   setTree: (tree: FamilyTree) => void;
+  loadTree: () => Promise<void>;
   addPerson: (person: Person) => void;
   updatePerson: (id: string, updates: Partial<Person>) => void;
   deletePerson: (id: string) => void;
@@ -186,6 +188,24 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   activeGenerationTab: "parents",
 
   setTree: (tree) => set({ tree }),
+
+  loadTree: async () => {
+    set({ isLoading: true });
+    try {
+      const result = await treeApi.getTree();
+      // Only replace demo data if the backend actually returned content,
+      // otherwise keep the seed so the public canvas is never blank.
+      if (result.persons.length > 0) {
+        set({ tree: result });
+      }
+      set({ error: null });
+    } catch {
+      // Network unreachable: silently keep existing DEMO data.
+      set({ error: null });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 
   addPerson: (person) =>
     set((state) => ({

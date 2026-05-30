@@ -24,9 +24,15 @@ export default function AuthPage() {
   const handlePhoneSubmit = async (phoneNumber: string) => {
     setIsLoading(true);
     try {
-      await authApi.requestOtp(phoneNumber);
+      const result = await authApi.requestOtp(phoneNumber);
       setPhone(phoneNumber);
       setStep("otp");
+      if (result.devCode) {
+        toast({
+          title: "Mode test",
+          description: `Mode test : code ${result.devCode}`,
+        });
+      }
     } catch {
       // In dev mode, simulate OTP sending
       setPhone(phoneNumber);
@@ -46,13 +52,7 @@ export default function AuthPage() {
       const result = await authApi.verifyOtp(phone, otp);
       login(result.token, result.userId, phone);
       setStep("success");
-      setTimeout(() => {
-        if (result.isNewUser) {
-          router.push("/onboarding");
-        } else {
-          router.push("/");
-        }
-      }, 1500);
+      setTimeout(() => router.push("/"), 1500);
     } catch {
       // Demo mode: accept 123456
       if (otp === "123456") {

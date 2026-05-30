@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { OnboardingData, Person } from "@/lib/types";
-import { onboardingApi, personsApi } from "@/lib/api";
+import { personsApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -206,13 +206,23 @@ export function OnboardingFlow() {
     setSearched(false);
 
     try {
-      const results = await onboardingApi.searchExisting({
-        firstName: onboardingData.self?.firstName || "",
-        lastName: onboardingData.self?.lastName || "",
-        fatherFirstName: onboardingData.father?.firstName,
-        fatherLastName: onboardingData.father?.lastName,
-        motherFirstName: onboardingData.mother?.firstName,
-        motherLastName: onboardingData.mother?.lastName,
+      const fatherName = onboardingData.father
+        ? `${onboardingData.father.firstName} ${onboardingData.father.lastName}`.trim()
+        : "";
+      const motherName = onboardingData.mother
+        ? `${onboardingData.mother.firstName} ${onboardingData.mother.lastName}`.trim()
+        : "";
+      const siblingNames = (
+        onboardingData.isOnlyChild ? [] : siblings
+      )
+        .map((s) => `${s.firstName} ${s.lastName}`.trim())
+        .filter(Boolean);
+      const results = await personsApi.search({
+        name: `${onboardingData.self?.firstName || ""} ${
+          onboardingData.self?.lastName || ""
+        }`.trim(),
+        parent_names: [fatherName, motherName].filter(Boolean),
+        sibling_names: siblingNames,
       });
       setSearchResults(results.map((r) => r.person));
     } catch {
@@ -253,17 +263,8 @@ export function OnboardingFlow() {
     router.push(`/?focus=${person.id}`);
   };
 
-  const handleCreateNew = async () => {
-    setIsLoading(true);
-    try {
-      await onboardingApi.createFromOnboarding({
-        self: onboardingData.self,
-        father: onboardingData.father,
-        mother: onboardingData.mother,
-        siblings: onboardingData.isOnlyChild ? [] : siblings,
-      });
-    } catch {
-      // Demo mode: create locally
+  const createLocally = () => {
+      // Demo / offline mode: create locally in the store
       const self = onboardingData.self!;
       const selfId = `p_${Date.now()}`;
       const selfPerson: Person = {
@@ -347,6 +348,25 @@ export function OnboardingFlow() {
           });
         });
       }
+  };
+
+  const handleCreateNew = async () => {
+    setIsLoading(true);
+    const self = onboardingData.self;
+    try {
+      if (!self) throw new Error("missing self");
+      // Create the main person via the real backend (requires auth).
+      const created = await personsApi.create({
+        firstName: self.firstName,
+        lastName: self.lastName,
+        nicknames: self.nickname ? [self.nickname] : [],
+        gender: self.gender,
+        birthDate: self.birthDate,
+      });
+      addPerson({ ...created, generation: 0 });
+    } catch {
+      // Not authenticated or network unreachable: build the family locally.
+      createLocally();
     }
 
     toast({

@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback } from "react";
 import { useFamilyTreeStore } from "@/lib/store";
-import { familyTreeApi } from "@/lib/api";
+import { treeApi } from "@/lib/api";
 import { computeTreeLayout } from "@/lib/utils";
 
 export function useFamilyTree() {
@@ -12,12 +12,14 @@ export function useFamilyTree() {
     store.setLoading(true);
     store.setError(null);
     try {
-      const tree = await familyTreeApi.getTreePublic();
-      const personsWithPositions = computeTreeLayout(
-        tree.persons,
-        tree.relationships
-      );
-      store.setTree({ ...tree, persons: personsWithPositions });
+      const tree = await treeApi.getTree();
+      if (tree.persons.length > 0) {
+        const personsWithPositions = computeTreeLayout(
+          tree.persons,
+          tree.relationships
+        );
+        store.setTree({ ...tree, persons: personsWithPositions });
+      }
     } catch {
       // Use demo data if API fails
       store.setError(null);
