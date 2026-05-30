@@ -14,6 +14,8 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// ─── Backend shapes ─────────────────────────────────────────────────────
+
 interface BackendMedia {
   id: string;
   type: "photo" | "audio";
@@ -63,6 +65,8 @@ interface TreeEdge {
   data: { relationship_type: "parent" | "child" | "sibling" | "spouse" };
 }
 
+// ─── Mappers ────────────────────────────────────────────────────────
+
 function mapGender(g?: string | null): Person["gender"] {
   if (g === "male") return "male";
   if (g === "female") return "female";
@@ -102,17 +106,61 @@ export function mapPersonToCreateBody(person: Partial<Person>) {
   return body;
 }
 
+// ─── Auth & Onboarding ─────────────────────────────────────────────
+
+export interface MeState {
+  userId: string;
+  phone: string;
+  personId: string | null;
+  onboarded: boolean;
+}
+
 export const authApi = {
   requestOtp: async (phone: string): Promise<{ message: string; devCode?: string }> => {
     const { data } = await apiClient.post<{ message: string; phone: string; dev_code?: string }>("/auth/request-otp", { phone });
     return { message: data.message, devCode: data.dev_code };
   },
 
-  verifyOtp: async (phone: string, code: string): Promise<{ token: string; userId: string; phone: string }> => {
-    const { data } = await apiClient.post<{ access_token: string; token_type: string; user_id: string; phone: string }>("/auth/verify-otp", { phone, code });
-    return { token: data.access_token, userId: data.user_id, phone: data.phone };
+  verifyOtp: async (
+    phone: string,
+    code: string,
+  ): Promise<{ token: string; userId: string; phone: string; personId: string | null; onboarded: boolean }> => {
+    const { data } = await apiClient.post<{
+      access_token: string;
+      token_type: string;
+      user_id: string;
+      phone: string;
+      person_id?: string | null;
+      onboarded?: boolean;
+    }>("/auth/verify-otp", { phone, code });
+    return {
+      token: data.access_token,
+      userId: data.user_id,
+      phone: data.phone,
+      personId: data.person_id ?? null,
+      onboarded: data.onboarded ?? false,
+    };
+  },
+
+  me: async (): Promise<MeState> => {
+    const { data } = await apiClient.get<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean }>("/auth/me");
+    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false };
+  },
+
+  // « C'est moi » : rattache le compte a une fiche existante du canvas.
+  linkPerson: async (personId: string): Promise<MeState> => {
+    const { data } = await apiClient.post<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean }>("/auth/link-person", { person_id: personId });
+    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false };
+  },
+
+  // « Creer ma fiche » : cree la premiere fiche de l'utilisateur et la rattache.
+  onboard: async (person: Partial<Person>): Promise<Person> => {
+    const { data } = await apiClient.post<PersonResponse>("/auth/onboard", mapPersonToCreateBody(person));
+    return mapPersonResponseToPerson(data);
   },
 };
+
+// ─── Tree ────────────────────────────────────────────────────────
 
 export const treeApi = {
   getTree: async (): Promise<FamilyTree> => {
@@ -143,6 +191,8 @@ export const treeApi = {
     return { persons, relationships };
   },
 };
+
+// ─── Persons ───────────────────────────────────────────────────
 
 export interface PersonSearchRequest {
   name?: string;
@@ -178,6 +228,8 @@ export const personsApi = {
   },
 };
 
+// ─── Relationships ───────────────────────────────────────────────
+
 export const relationshipsApi = {
   create: async (rel: Omit<Relationship, "id">): Promise<Relationship> => {
     const { data } = await apiClient.post<{ id: string; person_a_id: string; person_b_id: string; type: Relationship["type"] }>("/tree/relationships", { person_a_id: rel.personAId, person_b_id: rel.personBId, type: rel.type });
@@ -188,6 +240,8 @@ export const relationshipsApi = {
     await apiClient.delete(`/tree/relationships/${id}`);
   },
 };
+
+// ─── Media ───────────────────────────────────────────────────────
 
 export const mediaApi = {
   upload: async (personId: string, mediaType: "photo" | "audio", file: File): Promise<MediaFile> => {
