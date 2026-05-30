@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 30% 97%;
+    --foreground: 20 14% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 14% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14% 12%;
+    --primary: 28 80% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 38 25% 88%;
+    --secondary-foreground: 20 14% 20%;
+    --muted: 38 20% 92%;
+    --muted-foreground: 20 10% 45%;
+    --accent: 28 60% 90%;
+    --accent-foreground: 28 80% 30%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 38 20% 82%;
+    --input: 38 20% 82%;
+    --ring: 28 80% 45%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* React Flow overrides */
+.react-flow__renderer {
+  @apply rounded-none;
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--border));
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: hsl(var(--primary));
+}
+
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  background-color: hsl(var(--primary)) !important;
+  border: 2px solid white !important;
+}
+
+.react-flow__background {
+  background-color: hsl(40, 25%, 95%);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}
+
+/* OTP input */
+.otp-input {
+  @apply w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-lg focus:border-primary focus:outline-none transition-colors;
+}
+
+/* Person node animations */
+@keyframes pulse-audio {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+
+.audio-playing {
+  animation: pulse-audio 1s ease-in-out infinite;
+}
