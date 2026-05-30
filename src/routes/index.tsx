@@ -5,11 +5,18 @@ import { PersonCard } from "@/components/tree/PersonCard";
 import { EditPanel } from "@/components/tree/EditPanel";
 import { Toolbar } from "@/components/tree/Toolbar";
 import { MiniMap } from "@/components/tree/MiniMap";
+import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { Person } from "@/lib/types";
-import { LogIn, Plus, Sparkles } from "lucide-react";
+import { LogIn, TreePine } from "lucide-react";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Jabot — Arbre genealogique" },
+      { name: "description", content: "Votre arbre genealogique africain sur un canvas infini." },
+    ],
+  }),
   component: JabotCanvas,
 });
 
@@ -18,7 +25,7 @@ const WORLD = { w: 3000, h: 2000 };
 function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, loadTree } = useFamilyTreeStore();
-  const { isAuthenticated, phone, logout } = useAuthStore();
+  const { isAuthenticated, onboarded, phone, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -26,6 +33,9 @@ function JabotCanvas() {
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+
+  // L'onboarding s'affiche une seule fois : connecte mais pas encore rattache.
+  const showOnboarding = isAuthenticated && !onboarded;
 
   useEffect(() => {
     loadTree();
@@ -97,35 +107,31 @@ function JabotCanvas() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-canvas text-foreground">
       {/* Header */}
-      <header className="glass z-30 flex h-15 shrink-0 items-center justify-between border-b border-border/60 px-5 py-3">
+      <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/85 px-5 backdrop-blur-md">
         <div className="flex items-center gap-2.5">
-          <div className="brand-gradient grid size-8 place-items-center rounded-xl text-white shadow-sm">
-            <Sparkles className="size-4" />
+          <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
+            <TreePine className="size-4" />
           </div>
-          <div className="leading-none">
-            <h1 className="font-display text-xl font-bold tracking-tight text-foreground">Jabot</h1>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">Arbres généalogiques</p>
-          </div>
+          <h1 className="font-serif text-xl leading-none text-foreground">Jabot</h1>
         </div>
         <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
               <span className="hidden text-xs text-muted-foreground sm:block">{phone}</span>
-              <button className="brand-gradient flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90">
-                <Plus className="size-4" />
-                Ajouter
-              </button>
-              <button onClick={logout} className="text-xs text-muted-foreground hover:text-foreground">
-                Déconnexion
+              <button
+                onClick={logout}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Deconnexion
               </button>
             </div>
           ) : (
             <button
               onClick={() => navigate({ to: "/auth" })}
-              className="brand-gradient flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              <LogIn className="size-4" />
-              Présenter ma famille
+              <LogIn className="size-3.5" />
+              Presenter ma famille
             </button>
           )}
         </div>
@@ -140,6 +146,7 @@ function JabotCanvas() {
           onClick={(e) => { if (!(e.target as HTMLElement).closest("[data-card]")) setSelectedId(null); }}
           className="canvas-grid relative flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
         >
+          {/* Loading */}
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
@@ -149,36 +156,30 @@ function JabotCanvas() {
             </div>
           )}
 
+          {/* Empty state */}
           {!isLoading && tree.persons.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center p-6">
-              <div className="flex max-w-sm flex-col items-center gap-5 text-center">
-                <div className="brand-gradient grid size-20 place-items-center rounded-3xl text-4xl text-white shadow-float">
-                  🌿
-                </div>
-                <div className="space-y-1.5">
-                  <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
-                    Bienvenue sur <span className="text-gradient">Jabot</span>
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Explorez les arbres généalogiques partagés, ou présentez votre propre famille au monde.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate({ to: "/auth" })}
-                  className="brand-gradient flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold text-white shadow-float transition-opacity hover:opacity-90"
-                >
-                  {isAuthenticated ? <Plus className="size-4" /> : <Sparkles className="size-4" />}
-                  {isAuthenticated ? "Ajouter une personne" : "Présenter ma famille"}
-                </button>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="text-7xl">🌳</div>
+                <h2 className="font-serif text-2xl text-foreground">L'arbre est encore vide</h2>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  {isAuthenticated
+                    ? "Completez votre fiche pour demarrer l'arbre genealogique."
+                    : "Connectez-vous pour vous ajouter et presenter votre famille."}
+                </p>
                 {!isAuthenticated && (
-                  <p className="text-xs text-muted-foreground">
-                    Navigation libre — connexion requise uniquement pour créer.
-                  </p>
+                  <button
+                    onClick={() => navigate({ to: "/auth" })}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <LogIn className="size-4" /> Presenter ma famille
+                  </button>
                 )}
               </div>
             </div>
           )}
 
+          {/* World */}
           {!isLoading && tree.persons.length > 0 && (
             <div
               style={{
@@ -210,6 +211,8 @@ function JabotCanvas() {
 
         <EditPanel person={selected} onClose={() => setSelectedId(null)} isAuthenticated={isAuthenticated} />
       </main>
+
+      {showOnboarding && <OnboardingDialog />}
     </div>
   );
 }
