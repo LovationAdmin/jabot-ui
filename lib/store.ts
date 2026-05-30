@@ -75,110 +75,10 @@ interface FamilyTreeStore {
   getSpouse: (personId: string) => Person | undefined;
 }
 
-// Seed data for demo
-const DEMO_PERSONS: Person[] = [
-  {
-    id: "p1",
-    firstName: "Kofi",
-    lastName: "Mensah",
-    gender: "male",
-    birthDate: "1940-03-15",
-    deathDate: "2010-08-22",
-    cityOfOrigin: "Accra",
-    photos: [],
-    audios: [],
-    generation: -2,
-    nicknames: ["Grand-papa"],
-  },
-  {
-    id: "p2",
-    firstName: "Ama",
-    lastName: "Mensah",
-    gender: "female",
-    birthDate: "1943-07-01",
-    cityOfOrigin: "Kumasi",
-    photos: [],
-    audios: [],
-    generation: -2,
-    nicknames: ["Grand-maman"],
-  },
-  {
-    id: "p3",
-    firstName: "Kwame",
-    lastName: "Mensah",
-    gender: "male",
-    birthDate: "1968-11-10",
-    cityOfOrigin: "Accra",
-    photos: [],
-    audios: [],
-    generation: -1,
-  },
-  {
-    id: "p4",
-    firstName: "Abena",
-    lastName: "Asante",
-    gender: "female",
-    birthDate: "1972-04-25",
-    cityOfOrigin: "Abidjan",
-    photos: [],
-    audios: [],
-    generation: -1,
-  },
-  {
-    id: "p5",
-    firstName: "Yaw",
-    lastName: "Mensah",
-    gender: "male",
-    birthDate: "1995-06-12",
-    cityOfOrigin: "Accra",
-    photos: [],
-    audios: [],
-    generation: 0,
-  },
-  {
-    id: "p6",
-    firstName: "Akosua",
-    lastName: "Mensah",
-    gender: "female",
-    birthDate: "1997-09-03",
-    cityOfOrigin: "Accra",
-    photos: [],
-    audios: [],
-    generation: 0,
-  },
-  {
-    id: "p7",
-    firstName: "Kojo",
-    lastName: "Mensah",
-    gender: "male",
-    birthDate: "2000-01-17",
-    cityOfOrigin: "Accra",
-    photos: [],
-    audios: [],
-    generation: 0,
-  },
-];
-
-const DEMO_RELATIONSHIPS: Relationship[] = [
-  { id: "r1", personAId: "p1", personBId: "p3", type: "parent" },
-  { id: "r2", personAId: "p2", personBId: "p3", type: "parent" },
-  { id: "r3", personAId: "p1", personBId: "p2", type: "spouse" },
-  { id: "r4", personAId: "p3", personBId: "p4", type: "spouse" },
-  { id: "r5", personAId: "p3", personBId: "p5", type: "parent" },
-  { id: "r6", personAId: "p3", personBId: "p6", type: "parent" },
-  { id: "r7", personAId: "p3", personBId: "p7", type: "parent" },
-  { id: "r8", personAId: "p4", personBId: "p5", type: "parent" },
-  { id: "r9", personAId: "p4", personBId: "p6", type: "parent" },
-  { id: "r10", personAId: "p4", personBId: "p7", type: "parent" },
-  { id: "r11", personAId: "p5", personBId: "p6", type: "sibling" },
-  { id: "r12", personAId: "p5", personBId: "p7", type: "sibling" },
-  { id: "r13", personAId: "p6", personBId: "p7", type: "sibling" },
-];
-
 export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   tree: {
-    persons: DEMO_PERSONS,
-    relationships: DEMO_RELATIONSHIPS,
+    persons: [],
+    relationships: [],
   },
   isLoading: false,
   error: null,
@@ -192,16 +92,12 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   loadTree: async () => {
     set({ isLoading: true });
     try {
+      // Always reflect the real database — even when it is empty.
       const result = await treeApi.getTree();
-      // Only replace demo data if the backend actually returned content,
-      // otherwise keep the seed so the public canvas is never blank.
-      if (result.persons.length > 0) {
-        set({ tree: result });
-      }
-      set({ error: null });
+      set({ tree: result, error: null });
     } catch {
-      // Network unreachable: silently keep existing DEMO data.
-      set({ error: null });
+      // API unreachable: show an empty canvas (no fictitious data).
+      set({ tree: { persons: [], relationships: [] }, error: "unreachable" });
     } finally {
       set({ isLoading: false });
     }

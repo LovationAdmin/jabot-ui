@@ -206,13 +206,17 @@ export default function FamilyCanvas() {
         {/* Empty state */}
         {nodes.length === 0 && (
           <Panel position="top-center" className="mt-24">
-            <div className="animate-float-in rounded-2xl border bg-card/90 p-8 text-center shadow-card backdrop-blur-sm">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-2xl">
+            <div className="animate-float-in max-w-xs rounded-2xl border bg-card/90 p-8 text-center shadow-card backdrop-blur-sm">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-3xl">
                 🌳
               </div>
-              <h3 className="font-serif text-lg text-card-foreground">Arbre vide</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Aucune personne pour le moment.
+              <h3 className="font-serif text-xl text-card-foreground">
+                Commencez votre arbre
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {isAuthenticated
+                  ? "Ajoutez la première personne avec le bouton « Ajouter » ci-dessous."
+                  : "Connectez-vous pour ajouter les membres de votre famille."}
               </p>
             </div>
           </Panel>
