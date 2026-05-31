@@ -101,7 +101,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
       // addPerson met la fiche dans le store immédiatement — pas besoin de
       // recharger tout l'arbre (l'endpoint /tree n'inclut pas les nœuds isolés).
       addPerson(created);
-      setOnboarded(created.id);
+      setOnboarded(created.id, created.firstName);
       onCompleted?.(created.id);
     } catch {
       setError("Impossible de creer votre fiche. Reessayez.");

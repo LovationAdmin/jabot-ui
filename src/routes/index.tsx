@@ -219,7 +219,7 @@ function JabotCanvas() {
             >
               <Connectors persons={tree.persons} relationships={tree.relationships} />
               {tree.persons.map((p) => (
-                <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} />
+                <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} isAuthenticated={isAuthenticated} />
               ))}
             </div>
           )}
@@ -238,7 +238,10 @@ function JabotCanvas() {
 
         <EditPanel
           person={selected}
+          allPersons={tree.persons}
+          relationships={tree.relationships}
           onClose={() => setSelectedId(null)}
+          onSelectPerson={setSelectedId}
           isAuthenticated={isAuthenticated}
           onEdit={(p) => setForm({ mode: "edit", person: p })}
         />

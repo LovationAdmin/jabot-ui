@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   X, Loader2, Trash2, ChevronRight, ChevronLeft,
-  Plus, UserPlus, Check, Upload, Mic,
+  Plus, UserPlus, Check, Upload, Mic, Square,
 } from "lucide-react";
 import { personsApi, relationshipsApi, mediaApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
@@ -65,6 +65,42 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSecs, setRecordingSecs] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { timerRef.current && clearInterval(timerRef.current); }, []);
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], `vocal-${Date.now()}.webm`, { type: "audio/webm" });
+        setAudioFiles((ps) => [...ps, file]);
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+        setRecordingSecs(0);
+        timerRef.current && clearInterval(timerRef.current);
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setIsRecording(true);
+      setRecordingSecs(0);
+      timerRef.current = setInterval(() => setRecordingSecs((s) => s + 1), 1000);
+    } catch {
+      alert("Impossible d'accéder au microphone.");
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+  }
 
   // ── Relative lists ─────────────────────────────────────────────
   const [parents, setParents] = useState<PersonDraft[]>([]);
@@ -373,13 +409,33 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                         </button>
                       </div>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => audioRef.current?.click()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary"
-                    >
-                      <Upload className="size-4" /> Ajouter un audio
-                    </button>
+                    <div className="flex gap-2">
+                      {isRecording ? (
+                        <button
+                          type="button"
+                          onClick={stopRecording}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-destructive bg-destructive/10 py-2.5 text-sm font-medium text-destructive animate-pulse"
+                        >
+                          <Square className="size-4" />
+                          Arrêter ({recordingSecs}s)
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary"
+                        >
+                          <Mic className="size-4" /> Enregistrer
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => audioRef.current?.click()}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary"
+                      >
+                        <Upload className="size-4" /> Importer
+                      </button>
+                    </div>
                     <input
                       ref={audioRef}
                       type="file"

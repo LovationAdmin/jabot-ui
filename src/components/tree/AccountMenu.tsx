@@ -9,7 +9,7 @@ interface Props {
 
 export function AccountMenu({ onEditMyCard }: Props) {
   const navigate = useNavigate();
-  const { phone, personId, logout } = useAuthStore();
+  const { phone, personId, firstName: storedFirstName, logout } = useAuthStore();
   const { getPersonById } = useFamilyTreeStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -22,7 +22,10 @@ export function AccountMenu({ onEditMyCard }: Props) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // Préférer la fiche du store, sinon le prénom mémorisé lors de l'onboarding.
   const me = personId ? getPersonById(personId) : undefined;
+  const displayName = me?.firstName ?? storedFirstName;
+  const initial = (displayName?.[0] ?? phone?.slice(-2, -1) ?? "?").toUpperCase();
 
   return (
     <div className="relative" ref={ref}>
@@ -31,16 +34,18 @@ export function AccountMenu({ onEditMyCard }: Props) {
         className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground transition-colors hover:bg-muted"
       >
         <span className="grid size-5 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-          {(me?.firstName?.[0] ?? phone?.slice(-2, -1) ?? "?").toUpperCase()}
+          {initial}
         </span>
-        <span className="hidden max-w-[8rem] truncate sm:block">{me ? me.firstName : phone}</span>
+        <span className="hidden max-w-[8rem] truncate sm:block">{displayName ?? phone}</span>
         <ChevronDown className="size-3.5 text-muted-foreground" />
       </button>
 
       {open && (
         <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-float">
           <div className="border-b border-border px-4 py-3">
-            <p className="text-sm font-medium text-foreground">{me ? `${me.firstName} ${me.lastName}` : "Mon compte"}</p>
+            <p className="text-sm font-medium text-foreground">
+              {me ? `${me.firstName} ${me.lastName}`.trim() : (displayName ?? "Mon compte")}
+            </p>
             <p className="text-xs text-muted-foreground">{phone}</p>
           </div>
           <div className="p-1">
