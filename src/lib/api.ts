@@ -158,6 +158,11 @@ export const authApi = {
     const { data } = await apiClient.post<PersonResponse>("/auth/onboard", mapPersonToCreateBody(person));
     return mapPersonResponseToPerson(data);
   },
+
+  // Supprime le compte ; la fiche person reste intacte dans l'arbre.
+  deleteAccount: async (): Promise<void> => {
+    await apiClient.delete("/auth/me");
+  },
 };
 
 // ─── Tree ────────────────────────────────────────────────────────
