@@ -47,7 +47,16 @@ export function Connectors({ persons, relationships }: ConnectorsProps) {
           );
         }
 
-        if (rel.type === "parent") {
+        // Liens verticaux descendants (person_a au-dessus de person_b)
+        const VERTICAL_DOWN = ["parent", "grandparent", "step_parent", "uncle_aunt"];
+        // Liens verticaux ascendants (person_a en-dessous de person_b)
+        const VERTICAL_UP = ["child", "grandchild", "step_child", "nephew_niece"];
+        // Liens de même génération
+        const HORIZONTAL = ["sibling", "half_sibling", "step_sibling", "cousin", "homonym"];
+        // Les liens indirects (demi, beau, grand, oncle, cousin, homonyme) sont en pointillés.
+        const dashed = !["parent", "child", "sibling"].includes(rel.type);
+
+        if (VERTICAL_DOWN.includes(rel.type)) {
           const from = bottom(a);
           const to = top(b);
           const my = (from.y + to.y) / 2;
@@ -57,12 +66,13 @@ export function Connectors({ persons, relationships }: ConnectorsProps) {
               d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
               stroke="oklch(0.27 0.015 60 / 0.25)"
               strokeWidth="1.5"
+              strokeDasharray={dashed ? "5 3" : undefined}
               fill="none"
             />
           );
         }
 
-        if (rel.type === "child") {
+        if (VERTICAL_UP.includes(rel.type)) {
           const from = top(a);
           const to = bottom(b);
           const my = (from.y + to.y) / 2;
@@ -72,12 +82,13 @@ export function Connectors({ persons, relationships }: ConnectorsProps) {
               d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
               stroke="oklch(0.27 0.015 60 / 0.25)"
               strokeWidth="1.5"
+              strokeDasharray={dashed ? "5 3" : undefined}
               fill="none"
             />
           );
         }
 
-        if (rel.type === "sibling") {
+        if (HORIZONTAL.includes(rel.type)) {
           const ca = center(a);
           const cb = center(b);
           return (

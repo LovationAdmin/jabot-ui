@@ -125,7 +125,9 @@ export function OnboardingDialog({ onCompleted }: Props) {
         try {
           const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
           addPerson(parent);
-          const rel = await relationshipsApi.create({ personAId: personId, personBId: parent.id, type: "parent" });
+          // type "parent" = person_a est le parent de person_b → le parent doit
+          // être person_a et l'utilisateur person_b (sinon le sens est inversé).
+          const rel = await relationshipsApi.create({ personAId: parent.id, personBId: personId, type: "parent" });
           addRelationship(rel);
         } catch { /* silencieux */ }
       }
@@ -182,7 +184,9 @@ export function OnboardingDialog({ onCompleted }: Props) {
         try {
           const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
           addPerson(parent);
-          const rel = await relationshipsApi.create({ personAId: created.id, personBId: parent.id, type: "parent" });
+          // type "parent" = person_a est le parent de person_b → le parent doit
+          // être person_a et l'utilisateur person_b (sinon le sens est inversé).
+          const rel = await relationshipsApi.create({ personAId: parent.id, personBId: created.id, type: "parent" });
           addRelationship(rel);
         } catch { /* silencieux : l'essentiel est la fiche du user */ }
       }
