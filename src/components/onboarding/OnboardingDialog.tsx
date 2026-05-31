@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
-import { authApi, personsApi, relationshipsApi } from "@/lib/api";
+import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft, GitMerge, SkipForward } from "lucide-react";
+import { authApi, personsApi, relationshipsApi, mergeApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 import { Person, SearchResult } from "@/lib/types";
 
-type Step = "identity" | "origins" | "results";
+type Step = "identity" | "origins" | "results" | "merge";
 
 const STEPS: Step[] = ["identity", "origins", "results"];
 
@@ -12,6 +12,7 @@ const STEP_LABELS: Record<Step, string> = {
   identity: "Qui etes-vous ?",
   origins: "Vos origines",
   results: "Votre fiche",
+  merge: "Doublons detectes",
 };
 
 interface Props {
@@ -46,6 +47,8 @@ export function OnboardingDialog({ onCompleted }: Props) {
     siblingNames: "",
   });
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
+  const [pendingDuplicates, setPendingDuplicates] = useState<SearchResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,20 +87,80 @@ export function OnboardingDialog({ onCompleted }: Props) {
     setBusy(true);
     setError(null);
     try {
+      // 1. Rattacher le compte à la fiche existante
       const me = await authApi.linkPerson(personId);
       const linked = results.find((r) => r.person.id === personId)?.person;
+
+      // 2. Enrichir la fiche cible avec les données fraîchement saisies
+      //    (les données du formulaire priment sur les champs vides)
+      const patch: Partial<Person> = {};
+      if (form.firstName.trim()) patch.firstName = form.firstName.trim();
+      if (form.lastName.trim()) patch.lastName = form.lastName.trim();
+      if (form.nickname.trim()) patch.nicknames = [form.nickname.trim()];
+      if (form.gender !== "other") patch.gender = form.gender;
+      if (form.cityOfOrigin.trim()) patch.cityOfOrigin = form.cityOfOrigin.trim();
+      if (Object.keys(patch).length > 0) {
+        try { await personsApi.update(personId, patch); } catch { /* silencieux */ }
+      }
+
+      // 3. Créer les fiches parents/frères depuis le formulaire et les relier
+      for (const { firstName, lastName } of parseNames(form.parentNames)) {
+        try {
+          const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
+          addPerson(parent);
+          const rel = await relationshipsApi.create({ personAId: personId, personBId: parent.id, type: "parent" });
+          addRelationship(rel);
+        } catch { /* silencieux */ }
+      }
+      for (const { firstName, lastName } of parseNames(form.siblingNames)) {
+        try {
+          const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
+          addPerson(sibling);
+          const rel = await relationshipsApi.create({ personAId: personId, personBId: sibling.id, type: "sibling" });
+          addRelationship(rel);
+        } catch { /* silencieux */ }
+      }
+
       if (me.personId) {
-        setOnboarded(me.personId, linked?.firstName);
-        await loadTree();
-        onCompleted?.(me.personId);
+        setOnboarded(me.personId, form.firstName.trim() || linked?.firstName);
+      }
+
+      // 4. Proposer de fusionner les autres résultats à forte confiance
+      const duplicates = results.filter(
+        (r) => r.person.id !== personId && r.confidence >= 0.7,
+      );
+      setLinkedPersonId(personId);
+      if (duplicates.length > 0) {
+        setPendingDuplicates(duplicates);
+        setDirection("forward");
+        setStep("merge");
       } else {
         await loadTree();
+        onCompleted?.(personId);
       }
     } catch {
       setError("Impossible de vous rattacher a cette fiche. Reessayez.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleMergeDuplicate(sourceId: string) {
+    if (!linkedPersonId) return;
+    setBusy(true);
+    try {
+      await mergeApi.merge(sourceId, linkedPersonId);
+      setPendingDuplicates((ds) => ds.filter((d) => d.person.id !== sourceId));
+    } catch {
+      setError("Echec de la fusion. Reessayez.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFinishMerge() {
+    await loadTree();
+    if (linkedPersonId) onCompleted?.(linkedPersonId);
   }
 
   async function handleCreate() {
@@ -379,6 +442,58 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     Modifier mes informations
                   </button>
                 </div>
+              </>
+            )}
+
+            {/* ── Step merge : Fusion des doublons ──────────────── */}
+            {step === "merge" && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Ces fiches semblent egalement vous correspondre. Vous pouvez les fusionner dans votre fiche pour nettoyer les doublons — vos relations et medias seront conserves.
+                </p>
+
+                {error && (
+                  <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+                )}
+
+                {pendingDuplicates.length > 0 ? (
+                  <div className="space-y-2">
+                    {pendingDuplicates.map((r) => (
+                      <div key={r.person.id} className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-900/10 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {r.person.firstName} {r.person.lastName}
+                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">{Math.round(r.confidence * 100)}% similaire</span>
+                          </p>
+                          {r.matchReasons.length > 0 && (
+                            <p className="truncate text-xs text-muted-foreground">{r.matchReasons.join(" · ")}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleMergeDuplicate(r.person.id)}
+                          disabled={busy}
+                          className="shrink-0 flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                        >
+                          {busy ? <Loader2 className="size-3 animate-spin" /> : <GitMerge className="size-3.5" />}
+                          Fusionner
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-green-200 bg-green-50/50 dark:border-green-900/40 dark:bg-green-900/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+                    Tous les doublons ont ete fusionnes.
+                  </div>
+                )}
+
+                <button
+                  onClick={handleFinishMerge}
+                  disabled={busy}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <SkipForward className="size-4" />}
+                  {pendingDuplicates.length > 0 ? "Ignorer et terminer" : "Terminer"}
+                </button>
               </>
             )}
           </div>

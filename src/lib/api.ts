@@ -247,6 +247,15 @@ export const relationshipsApi = {
   },
 };
 
+// ─── Merge ───────────────────────────────────────────────────────
+
+export const mergeApi = {
+  // Fusionne source → target (target gagne sur les conflits, source supprimee).
+  merge: async (sourcePersonId: string, targetPersonId: string): Promise<void> => {
+    await apiClient.post("/tree/merge", { source_person_id: sourcePersonId, target_person_id: targetPersonId });
+  },
+};
+
 // ─── Media ───────────────────────────────────────────────────────
 
 export const mediaApi = {
