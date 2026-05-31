@@ -23,6 +23,7 @@ interface RelativeOption { value: string; label: string }
 interface PersonDraft {
   _key: string;
   existingId?: string;
+  relId?: string;       // set for pre-existing relationships in edit mode
   firstName: string;
   lastName: string;
   gender: "male" | "female" | "other";
@@ -39,10 +40,26 @@ interface Props {
   onClose: () => void;
 }
 
+// Direction-aware effective type helper (same logic as EditPanel)
+const INVERSE: Record<string, string> = {
+  parent: "child", child: "parent",
+  grandparent: "grandchild", grandchild: "grandparent",
+  uncle_aunt: "nephew_niece", nephew_niece: "uncle_aunt",
+  step_parent: "step_child", step_child: "step_parent",
+};
+
+function effectiveTypeFor(r: Relationship, viewerId: string): string {
+  if (r.personAId === viewerId && INVERSE[r.type]) return INVERSE[r.type];
+  return r.type;
+}
+
+const PARENT_TYPES = new Set(["parent", "step_parent"]);
+const SIBLING_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
+
 // ─── Main component ────────────────────────────────────────────────
 
 export function PersonFormDialog({ mode, person, onClose }: Props) {
-  const { tree, addPerson, updatePerson, deletePerson, addRelationship } = useFamilyTreeStore();
+  const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -107,6 +124,45 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   const [siblings, setSiblings] = useState<PersonDraft[]>([]);
   const [relatives, setRelatives] = useState<PersonDraft[]>([]);
 
+  // Pre-populate from existing relationships in edit mode
+  useEffect(() => {
+    if (mode !== "edit" || !person) return;
+    const byId = new Map(tree.persons.map((p) => [p.id, p]));
+    const personRels = tree.relationships.filter(
+      (r) => r.personAId === person.id || r.personBId === person.id,
+    );
+
+    const newParents: PersonDraft[] = [];
+    const newSiblings: PersonDraft[] = [];
+    const newRelatives: PersonDraft[] = [];
+
+    for (const r of personRels) {
+      const otherId = r.personAId === person.id ? r.personBId : r.personAId;
+      const other = byId.get(otherId);
+      if (!other) continue;
+      const eff = effectiveTypeFor(r, person.id);
+
+      const draft: PersonDraft = {
+        _key: r.id,
+        relId: r.id,
+        existingId: other.id,
+        firstName: other.firstName,
+        lastName: other.lastName ?? "",
+        gender: other.gender ?? "other",
+        relType: eff,
+      };
+
+      if (PARENT_TYPES.has(eff)) newParents.push(draft);
+      else if (SIBLING_TYPES.has(eff)) newSiblings.push(draft);
+      else newRelatives.push(draft);
+    }
+
+    setParents(newParents);
+    setSiblings(newSiblings);
+    setRelatives(newRelatives);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const field = (k: keyof typeof form, v: string | boolean) =>
     setForm((f) => ({ ...f, [k]: v }));
 
@@ -146,10 +202,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
       for (const f of photoFiles) await mediaApi.upload(pid, "photo", f);
       for (const f of audioFiles) await mediaApi.upload(pid, "audio", f);
 
-      if (mode === "edit") {
-        onClose();
-        return;
-      }
       goTo("parents", "forward");
     } catch {
       setError("Echec de l'enregistrement. Reessayez.");
@@ -158,16 +210,32 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     }
   }
 
+  // ── Remove an existing relationship immediately ────────────────
+  async function removeExistingRel(
+    relId: string,
+    setter: React.Dispatch<React.SetStateAction<PersonDraft[]>>,
+  ) {
+    try {
+      await relationshipsApi.delete(relId);
+      deleteRelationship(relId);
+      setter((prev) => prev.filter((d) => d.relId !== relId));
+    } catch {
+      // keep in list silently
+    }
+  }
+
   // ── Save relatives then advance ────────────────────────────────
   async function commitDrafts(drafts: PersonDraft[], nextStep: () => void) {
-    if (!savedId || drafts.length === 0) { nextStep(); return; }
+    const newDrafts = drafts.filter((d) => !d.relId);
+    const currentId = savedId ?? person?.id;
+    if (!currentId || newDrafts.length === 0) { nextStep(); return; }
     setBusy(true);
     setError(null);
     try {
-      for (const d of drafts) {
+      for (const d of newDrafts) {
         if (d.existingId) {
           const rel = await relationshipsApi.create({
-            personAId: savedId,
+            personAId: currentId,
             personBId: d.existingId,
             type: d.relType as Relationship["type"],
           });
@@ -180,7 +248,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
           });
           addPerson(created);
           const rel = await relationshipsApi.create({
-            personAId: savedId,
+            personAId: currentId,
             personBId: created.id,
             type: d.relType as Relationship["type"],
           });
@@ -211,7 +279,8 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   }
 
   const stepIndex = STEPS.indexOf(step);
-  const others = tree.persons.filter((p) => p.id !== savedId);
+  const currentId = savedId ?? person?.id;
+  const others = tree.persons.filter((p) => p.id !== currentId);
 
   const inputCls =
     "w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring";
@@ -229,15 +298,13 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             </h2>
             <p className="text-xs text-muted-foreground">{STEP_LABELS[step]}</p>
           </div>
-          {mode === "create" && (
-            <div className="flex gap-1.5">
-              {STEPS.map((s, i) => (
-                <div key={s} className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === stepIndex ? "w-6 bg-primary" : i < stepIndex ? "w-1.5 bg-primary/40" : "w-1.5 bg-border"
-                }`} />
-              ))}
-            </div>
-          )}
+          <div className="flex gap-1.5">
+            {STEPS.map((s, i) => (
+              <div key={s} className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === stepIndex ? "w-6 bg-primary" : i < stepIndex ? "w-1.5 bg-primary/40" : "w-1.5 bg-border"
+              }`} />
+            ))}
+          </div>
           <button onClick={onClose} className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
             <X className="size-4" />
           </button>
@@ -469,7 +536,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
                     {busy && <Loader2 className="size-4 animate-spin" />}
-                    {mode === "edit" ? "Enregistrer" : <>Suivant <ChevronRight className="size-4" /></>}
+                    Suivant <ChevronRight className="size-4" />
                   </button>
                 </div>
               </>
@@ -478,7 +545,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             {/* ── Step 2: Parents ───────────────────────────────── */}
             {step === "parents" && (
               <RelativesStep
-                title="Ajoutez les parents si vous les connaissez"
+                title="Parents"
                 hint="Père, mère, beau-parent, ou les deux."
                 relTypeOptions={[
                   { value: "parent", label: "Parent" },
@@ -492,6 +559,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 busy={busy}
                 onBack={() => goTo("identity", "back")}
                 onNext={() => commitDrafts(parents, () => goTo("siblings", "forward"))}
+                onRemoveExisting={(relId) => removeExistingRel(relId, setParents)}
                 inputCls={inputCls}
               />
             )}
@@ -499,7 +567,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             {/* ── Step 3: Frères/Sœurs ──────────────────────────── */}
             {step === "siblings" && (
               <RelativesStep
-                title="Ajoutez les frères et sœurs si vous les connaissez"
+                title="Frères et sœurs"
                 relTypeOptions={[
                   { value: "sibling", label: "Frère / Sœur" },
                   { value: "half_sibling", label: "Demi-frère / Demi-sœur" },
@@ -513,6 +581,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 busy={busy}
                 onBack={() => goTo("parents", "back")}
                 onNext={() => commitDrafts(siblings, () => goTo("relatives", "forward"))}
+                onRemoveExisting={(relId) => removeExistingRel(relId, setSiblings)}
                 inputCls={inputCls}
               />
             )}
@@ -520,7 +589,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             {/* ── Step 4: Autres proches ────────────────────────── */}
             {step === "relatives" && (
               <RelativesStep
-                title="Ajoutez d'autres proches"
+                title="Autres proches"
                 hint="Vous pourrez toujours en ajouter plus tard."
                 relTypeOptions={[
                   { value: "spouse", label: "Conjoint(e)" },
@@ -533,7 +602,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                   { value: "cousin", label: "Cousin(e)" },
                   { value: "homonym", label: "Homonyme" },
                 ]}
-                defaultRelType="grandparent"
+                defaultRelType="spouse"
                 entries={relatives}
                 setEntries={setRelatives}
                 existingPersons={others}
@@ -541,6 +610,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 busy={busy}
                 onBack={() => goTo("siblings", "back")}
                 onNext={() => commitDrafts(relatives, onClose)}
+                onRemoveExisting={(relId) => removeExistingRel(relId, setRelatives)}
                 isLastStep
                 inputCls={inputCls}
               />
@@ -554,6 +624,15 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
 
 // ─── RelativesStep sub-component ───────────────────────────────────
 
+const REL_LABEL: Record<string, string> = {
+  parent: "Parent", step_parent: "Beau-parent",
+  sibling: "Frère / Sœur", half_sibling: "Demi-frère / Demi-sœur", step_sibling: "Frère/Sœur par alliance",
+  spouse: "Conjoint(e)", child: "Enfant", step_child: "Beau-fils / Belle-fille",
+  grandparent: "Grand-parent", grandchild: "Petit-enfant",
+  uncle_aunt: "Oncle / Tante", nephew_niece: "Neveu / Nièce",
+  cousin: "Cousin(e)", homonym: "Homonyme",
+};
+
 interface RelativesStepProps {
   title: string;
   hint?: string;
@@ -566,13 +645,14 @@ interface RelativesStepProps {
   busy: boolean;
   onBack: () => void;
   onNext: () => void;
+  onRemoveExisting: (relId: string) => void;
   isLastStep?: boolean;
   inputCls: string;
 }
 
 function RelativesStep({
   title, hint, relTypeOptions, defaultRelType, entries, setEntries,
-  existingPersons, error, busy, onBack, onNext, isLastStep, inputCls,
+  existingPersons, error, busy, onBack, onNext, onRemoveExisting, isLastStep, inputCls,
 }: RelativesStepProps) {
   const [draftMode, setDraftMode] = useState<"new" | "existing" | null>(null);
   const [draft, setDraft] = useState<PersonDraft>(emptyDraft(defaultRelType));
@@ -588,16 +668,19 @@ function RelativesStep({
   };
 
   const relLabel = (d: PersonDraft) =>
-    relTypeOptions.find((o) => o.value === d.relType)?.label ?? d.relType;
+    REL_LABEL[d.relType] ?? relTypeOptions.find((o) => o.value === d.relType)?.label ?? d.relType;
 
-  const existingName = (d: PersonDraft) => {
-    const p = existingPersons.find((x) => x.id === d.existingId);
-    return p ? `${p.firstName} ${p.lastName}`.trim() : "";
+  const personName = (d: PersonDraft) => {
+    if (d.existingId) {
+      const p = existingPersons.find((x) => x.id === d.existingId);
+      if (p) return `${p.firstName} ${p.lastName ?? ""}`.trim();
+    }
+    return `${d.firstName} ${d.lastName}`.trim();
   };
 
   return (
     <>
-      <p className="text-sm text-muted-foreground">{title}</p>
+      <p className="text-sm font-medium text-foreground">{title}</p>
       {hint && <p className="text-xs text-muted-foreground/70">{hint}</p>}
 
       {/* Added entries */}
@@ -606,13 +689,20 @@ function RelativesStep({
           {entries.map((e, i) => (
             <div key={e._key} className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2 gap-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {e.existingId ? existingName(e) : `${e.firstName} ${e.lastName}`.trim()}
+                <p className="truncate text-sm font-medium text-foreground">{personName(e)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {relLabel(e)}
+                  {e.relId && <span className="ml-1 text-[10px] opacity-50">· existant</span>}
                 </p>
-                <p className="text-xs text-muted-foreground">{relLabel(e)}</p>
               </div>
               <button
-                onClick={() => setEntries((es) => es.filter((_, j) => j !== i))}
+                onClick={() => {
+                  if (e.relId) {
+                    onRemoveExisting(e.relId);
+                  } else {
+                    setEntries((es) => es.filter((_, j) => j !== i));
+                  }
+                }}
                 className="shrink-0 text-muted-foreground hover:text-destructive"
               >
                 <X className="size-4" />
