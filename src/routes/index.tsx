@@ -11,6 +11,7 @@ import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
+import { computeFamilyColors } from "@/lib/familyColors";
 import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -122,7 +123,17 @@ function JabotCanvas() {
     [pan.x, pan.y, viewport.w, viewport.h],
   );
 
-  const reset = () => { setZoom(1); setPan({ x: 80, y: 60 }); };
+  // Recadre sur la fiche de l'utilisateur s'il en a une, sinon centre le canvas.
+  const reset = () => {
+    if (isAuthenticated && personId) {
+      centerOnPerson(personId);
+    } else {
+      setZoom(1);
+      setPan({ x: 80, y: 60 });
+    }
+  };
+
+  const familyColors = computeFamilyColors(tree.persons, tree.relationships);
 
   const selected: Person | null = tree.persons.find((p) => p.id === selectedId) ?? null;
 
@@ -348,9 +359,9 @@ function JabotCanvas() {
               }}
               className="absolute left-0 top-0"
             >
-              <Connectors persons={tree.persons} relationships={tree.relationships} width={WORLD.w} height={WORLD.h} />
+              <Connectors persons={tree.persons} relationships={tree.relationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
               {tree.persons.map((p) => (
-                <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} isAuthenticated={isAuthenticated} />
+                <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} isAuthenticated={isAuthenticated} familyColor={familyColors.get(p.id)} />
               ))}
             </div>
           )}
