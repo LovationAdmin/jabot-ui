@@ -197,6 +197,11 @@ export function OnboardingDialog({ onCompleted }: Props) {
         } catch { /* silencieux */ }
       }
 
+      // 4. Recharger l'arbre complet pour récupérer la mise en page calculée
+      //    par le backend (sinon tous les proches restent empilés en (0,0) et
+      //    seul le dernier est visible sur le canvas).
+      await loadTree();
+
       onCompleted?.(created.id);
     } catch {
       setError("Impossible de creer votre fiche. Reessayez.");
