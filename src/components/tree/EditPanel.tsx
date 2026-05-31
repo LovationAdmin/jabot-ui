@@ -65,19 +65,63 @@ function buildGroups(
   const otherId = (r: Relationship) =>
     r.personAId === personId ? r.personBId : r.personAId;
 
-  // Helpers
+  // Les types DIRECTIONNELS dépendent du sens de l'arête : person_a EST le
+  // <type> de person_b (ex: parent → person_a est parent de person_b).
+  // Selon que `personId` est person_a ou person_b, le rôle s'inverse.
+  //   - parent ↔ child
+  //   - grandparent ↔ grandchild
+  //   - uncle_aunt ↔ nephew_niece
+  //   - step_parent ↔ step_child
+  // Les types SYMÉTRIQUES (sibling, spouse, cousin, homonym…) ne s'inversent pas.
+  const INVERSE: Record<string, string> = {
+    parent: "child", child: "parent",
+    grandparent: "grandchild", grandchild: "grandparent",
+    uncle_aunt: "nephew_niece", nephew_niece: "uncle_aunt",
+    step_parent: "step_child", step_child: "step_parent",
+  };
+
+  // Rôle EFFECTIF de l'autre personne vu depuis `personId`.
+  // Si personId est person_b sur une arête "parent", l'autre (person_a) est
+  // bien son parent → rôle "parent". Si personId est person_a, l'autre
+  // (person_b) est son enfant → rôle inversé "child".
+  const effectiveType = (r: Relationship): string => {
+    if (r.personBId === personId && INVERSE[r.type]) {
+      // personId est la cible (person_b) : le type reste tel quel côté "autre".
+      return r.type;
+    }
+    if (r.personAId === personId && INVERSE[r.type]) {
+      // personId est la source (person_a) : on inverse le rôle de l'autre.
+      return INVERSE[r.type];
+    }
+    return r.type; // type symétrique
+  };
+
+  // Helper : retourne les entrées dont le rôle effectif correspond aux types.
   const directOfType = (...types: string[]): RelEntry[] =>
     directRels
-      .filter((r) => types.includes(r.type))
+      .filter((r) => types.includes(effectiveType(r)))
       .flatMap((r) => {
         const p = byId.get(otherId(r));
-        return p ? [{ person: p, relId: r.id, relType: r.type, inferred: false }] : [];
+        return p ? [{ person: p, relId: r.id, relType: effectiveType(r), inferred: false }] : [];
       });
 
+  // Rôle effectif de l'autre personne vu depuis `srcId` (même logique que
+  // effectiveType mais relative à une source arbitraire, pas à personId).
+  const effectiveTypeFrom = (r: Relationship, srcId: string): string => {
+    if (r.personAId === srcId && INVERSE[r.type]) return INVERSE[r.type];
+    return r.type;
+  };
+
+  // Déduit des liens en remontant depuis chaque source, en respectant le
+  // SENS des arêtes. `types` désigne les rôles effectifs attendus côté source.
   const infer = (sources: Person[], relType: string, ...types: string[]): RelEntry[] =>
     sources.flatMap((src) =>
       relationships
-        .filter((r) => (r.personAId === src.id || r.personBId === src.id) && types.includes(r.type))
+        .filter(
+          (r) =>
+            (r.personAId === src.id || r.personBId === src.id) &&
+            types.includes(effectiveTypeFrom(r, src.id)),
+        )
         .flatMap((r) => {
           const pid = r.personAId === src.id ? r.personBId : r.personAId;
           if (pid === personId) return [];

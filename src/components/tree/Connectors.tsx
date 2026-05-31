@@ -1,5 +1,5 @@
 import { Person, Relationship } from "@/lib/types";
-import { FamilyColor } from "@/lib/familyColors";
+import { FamilyColor, alpha } from "@/lib/familyColors";
 import { CARD_W, CARD_H } from "./PersonCard";
 
 interface ConnectorsProps {
@@ -31,9 +31,9 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
   const map = new Map(persons.map((p) => [p.id, p]));
 
   // Stroke color for a relationship: use the family color of either endpoint.
-  const relStroke = (idA: string, idB: string, alpha = "88"): string => {
+  const relStroke = (idA: string, idB: string, a = 0.55): string => {
     const c = familyColors?.get(idA) ?? familyColors?.get(idB);
-    return c ? `${c.border}${alpha}` : `oklch(0.45 0.12 55 / 0.55)`;
+    return c ? alpha(c.border, a) : `oklch(0.45 0.12 55 / 0.55)`;
   };
 
   // Group parent→child edges: parentId → Set<childId>
@@ -158,7 +158,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const mx = (ca.x + cb.x) / 2;
     // Conjoints : couleur légèrement différente (teinte rosée propre à la famille)
     const sc = familyColors?.get(rel.personAId) ?? familyColors?.get(rel.personBId);
-    const spouseStroke = sc ? `${sc.accent}99` : "oklch(0.60 0.18 20 / 0.50)";
+    const spouseStroke = sc ? alpha(sc.accent, 0.6) : "oklch(0.60 0.18 20 / 0.50)";
     paths.push(
       <path
         key={`spouse-${rel.id}`}
@@ -187,7 +187,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const dashed = DASHED_TYPES.has(rel.type);
     const ca = center(a);
     const cb = center(b);
-    const hs = relStroke(rel.personAId, rel.personBId, "55");
+    const hs = relStroke(rel.personAId, rel.personBId, 0.4);
     paths.push(
       <line
         key={`horiz-${rel.id}`}
@@ -207,7 +207,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const a = map.get(rel.personAId);
     const b = map.get(rel.personBId);
     if (!a || !b) continue;
-    const es = relStroke(rel.personAId, rel.personBId, "44");
+    const es = relStroke(rel.personAId, rel.personBId, 0.3);
 
     if (VERTICAL_DOWN.includes(rel.type)) {
       const from = bottom(a);

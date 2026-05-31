@@ -1,5 +1,5 @@
 import { Person } from "@/lib/types";
-import { FamilyColor } from "@/lib/familyColors";
+import { FamilyColor, alpha } from "@/lib/familyColors";
 import { cn } from "@/lib/utils";
 import { MapPin, Music, Lock } from "lucide-react";
 
@@ -50,7 +50,7 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
       {/* Photo */}
       <div
         className="relative size-14 shrink-0 overflow-hidden rounded-xl"
-        style={familyColor ? { outline: `2px solid ${familyColor.border}33` } : undefined}
+        style={familyColor ? { outline: `2px solid ${alpha(familyColor.border, 0.2)}` } : undefined}
       >
         {isAuthenticated && photo ? (
           <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
@@ -97,7 +97,7 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
       {isAuthenticated && person.audios.length > 0 && (
         <div
           className="absolute right-2.5 top-2.5 flex size-5 items-center justify-center rounded-full"
-          style={familyColor ? { background: `${familyColor.accent}22` } : { background: "var(--color-primary-12)" }}
+          style={familyColor ? { background: alpha(familyColor.accent, 0.13) } : { background: "var(--color-primary-12)" }}
         >
           <Music className="size-2.5" style={familyColor ? { color: familyColor.accent } : { color: "var(--color-primary)" }} />
         </div>
