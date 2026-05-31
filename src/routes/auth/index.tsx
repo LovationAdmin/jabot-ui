@@ -95,7 +95,7 @@ function AuthPage() {
           {step === "phone" && (
             <>
               <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Presenter ma famille</h1>
+                <h1 className="font-serif text-2xl text-foreground">Creer ma fiche</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Entrez votre numero pour recevoir un code
                 </p>

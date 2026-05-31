@@ -9,6 +9,7 @@ import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 import { AccountMenu } from "@/components/tree/AccountMenu";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
+import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
 
@@ -28,7 +29,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, loadTree, getPersonById } = useFamilyTreeStore();
+  const { tree, isLoading, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
   const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,6 +48,20 @@ function JabotCanvas() {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  // Si notre fiche est isolee (aucun lien), /tree l'exclut : on la recupere
+  // pour que l'utilisateur retrouve toujours sa propre fiche apres connexion.
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !personId) return;
+    if (getPersonById(personId)) return;
+    personsApi
+      .getAll()
+      .then((persons) => {
+        const me = persons.find((p) => p.id === personId);
+        if (me) addPerson(me);
+      })
+      .catch(() => { /* silencieux */ });
+  }, [isLoading, isAuthenticated, personId, getPersonById, addPerson]);
 
   useLayoutEffect(() => {
     if (!canvasRef.current) return;
@@ -172,13 +187,19 @@ function JabotCanvas() {
         {/* Banner visiteur */}
         {!isAuthenticated && tree.persons.length > 0 && !searchOpen && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3">
-            <div className="pointer-events-auto glass flex items-center gap-3 rounded-full border border-border px-4 py-2 shadow-float">
-              <span className="text-sm text-muted-foreground">Vous parcourez l'arbre en tant que visiteur —</span>
+            <div className="pointer-events-auto glass flex items-center gap-2 rounded-full border border-border px-3 py-1.5 shadow-float">
+              <span className="hidden text-sm text-muted-foreground sm:block">Visiteur — parcourez librement,</span>
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <Search className="size-3.5" /> Rechercher
+              </button>
               <button
                 onClick={() => navigate({ to: "/auth" })}
-                className="text-sm font-medium text-primary hover:underline"
+                className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Rejoindre pour contribuer
+                <LogIn className="size-3.5" /> Creer ma fiche
               </button>
             </div>
           </div>
@@ -269,12 +290,20 @@ function JabotCanvas() {
                     <Plus className="size-4" /> Ajouter une personne
                   </button>
                 ) : (
-                  <button
-                    onClick={() => navigate({ to: "/auth" })}
-                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    <LogIn className="size-4" /> Presenter ma famille
-                  </button>
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      onClick={() => setSearchOpen(true)}
+                      className="flex w-56 items-center justify-center gap-2 rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                    >
+                      <Search className="size-4" /> Rechercher un proche
+                    </button>
+                    <button
+                      onClick={() => navigate({ to: "/auth" })}
+                      className="flex w-56 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <LogIn className="size-4" /> Creer ma fiche
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

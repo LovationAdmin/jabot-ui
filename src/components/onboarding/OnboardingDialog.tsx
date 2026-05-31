@@ -85,8 +85,9 @@ export function OnboardingDialog({ onCompleted }: Props) {
     setError(null);
     try {
       const me = await authApi.linkPerson(personId);
+      const linked = results.find((r) => r.person.id === personId)?.person;
       if (me.personId) {
-        setOnboarded(me.personId);
+        setOnboarded(me.personId, linked?.firstName);
         await loadTree();
         onCompleted?.(me.personId);
       } else {
