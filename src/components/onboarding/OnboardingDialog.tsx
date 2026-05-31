@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
 import { authApi, personsApi, relationshipsApi, mergeApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
-import { Person, SearchResult } from "@/lib/types";
+import { Person, SearchResult, Relationship } from "@/lib/types";
 
 type Step = "identity" | "origins" | "results";
 
@@ -99,6 +99,68 @@ export function OnboardingDialog({ onCompleted }: Props) {
     }
   }
 
+  // Crée les fiches des proches saisis et déduit TOUS les liens de parenté,
+  // pas seulement ceux de la fiche principale :
+  //   - chaque parent EST parent de l'utilisateur (parent → user)
+  //   - les parents sont conjoints entre eux (spouse) si ≥ 2 parents
+  //   - chaque parent EST aussi parent de chaque frère/sœur (parent → sibling)
+  //   - l'utilisateur et chaque frère/sœur sont frères/sœurs (sibling)
+  //   - les frères/sœurs sont frères/sœurs entre eux (sibling)
+  async function linkRelatives(mainPersonId: string) {
+    const parentIds: string[] = [];
+    const siblingIds: string[] = [];
+
+    // Créer les parents
+    for (const { firstName, lastName } of parseNames(form.parentNames)) {
+      try {
+        const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
+        addPerson(parent);
+        parentIds.push(parent.id);
+      } catch { /* silencieux */ }
+    }
+
+    // Créer la fratrie
+    for (const { firstName, lastName } of parseNames(form.siblingNames)) {
+      try {
+        const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
+        addPerson(sibling);
+        siblingIds.push(sibling.id);
+      } catch { /* silencieux */ }
+    }
+
+    const link = async (personAId: string, personBId: string, type: string) => {
+      try {
+        const rel = await relationshipsApi.create({ personAId, personBId, type: type as Relationship["type"] });
+        addRelationship(rel);
+      } catch { /* silencieux : la relation existe peut-être déjà */ }
+    };
+
+    // parent → user (type "parent" : person_a est le parent de person_b)
+    for (const pid of parentIds) await link(pid, mainPersonId, "parent");
+
+    // parents conjoints entre eux
+    for (let i = 0; i < parentIds.length; i++) {
+      for (let j = i + 1; j < parentIds.length; j++) {
+        await link(parentIds[i], parentIds[j], "spouse");
+      }
+    }
+
+    // chaque parent → chaque frère/sœur (ils partagent les mêmes parents)
+    for (const pid of parentIds) {
+      for (const sid of siblingIds) await link(pid, sid, "parent");
+    }
+
+    // user ↔ chaque frère/sœur
+    for (const sid of siblingIds) await link(mainPersonId, sid, "sibling");
+
+    // frères/sœurs entre eux
+    for (let i = 0; i < siblingIds.length; i++) {
+      for (let j = i + 1; j < siblingIds.length; j++) {
+        await link(siblingIds[i], siblingIds[j], "sibling");
+      }
+    }
+  }
+
   async function handleLink(personId: string) {
     setBusy(true);
     setError(null);
@@ -120,25 +182,8 @@ export function OnboardingDialog({ onCompleted }: Props) {
         try { await personsApi.update(personId, patch); } catch { /* silencieux */ }
       }
 
-      // 3. Créer les fiches parents/frères depuis le formulaire et les relier
-      for (const { firstName, lastName } of parseNames(form.parentNames)) {
-        try {
-          const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
-          addPerson(parent);
-          // type "parent" = person_a est le parent de person_b → le parent doit
-          // être person_a et l'utilisateur person_b (sinon le sens est inversé).
-          const rel = await relationshipsApi.create({ personAId: parent.id, personBId: personId, type: "parent" });
-          addRelationship(rel);
-        } catch { /* silencieux */ }
-      }
-      for (const { firstName, lastName } of parseNames(form.siblingNames)) {
-        try {
-          const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
-          addPerson(sibling);
-          const rel = await relationshipsApi.create({ personAId: personId, personBId: sibling.id, type: "sibling" });
-          addRelationship(rel);
-        } catch { /* silencieux */ }
-      }
+      // 3. Créer parents + fratrie et déduire tous les liens (cf. linkRelatives)
+      await linkRelatives(personId);
 
       if (me.personId) {
         setOnboarded(me.personId, form.firstName.trim() || linked?.firstName);
@@ -179,27 +224,8 @@ export function OnboardingDialog({ onCompleted }: Props) {
       addPerson(created);
       setOnboarded(created.id, created.firstName);
 
-      // 2. Créer les fiches des parents et les relier
-      for (const { firstName, lastName } of parseNames(form.parentNames)) {
-        try {
-          const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
-          addPerson(parent);
-          // type "parent" = person_a est le parent de person_b → le parent doit
-          // être person_a et l'utilisateur person_b (sinon le sens est inversé).
-          const rel = await relationshipsApi.create({ personAId: parent.id, personBId: created.id, type: "parent" });
-          addRelationship(rel);
-        } catch { /* silencieux : l'essentiel est la fiche du user */ }
-      }
-
-      // 3. Créer les fiches des frères/sœurs et les relier
-      for (const { firstName, lastName } of parseNames(form.siblingNames)) {
-        try {
-          const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
-          addPerson(sibling);
-          const rel = await relationshipsApi.create({ personAId: created.id, personBId: sibling.id, type: "sibling" });
-          addRelationship(rel);
-        } catch { /* silencieux */ }
-      }
+      // 2. Créer parents + fratrie et déduire tous les liens (cf. linkRelatives)
+      await linkRelatives(created.id);
 
       // 4. Recharger l'arbre complet pour récupérer la mise en page calculée
       //    par le backend (sinon tous les proches restent empilés en (0,0) et

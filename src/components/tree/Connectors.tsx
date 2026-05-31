@@ -4,6 +4,8 @@ import { CARD_W, CARD_H } from "./PersonCard";
 interface ConnectorsProps {
   persons: Person[];
   relationships: Relationship[];
+  width?: number;
+  height?: number;
 }
 
 function bottom(p: Person) {
@@ -23,7 +25,7 @@ const DASHED_TYPES = new Set([
   "uncle_aunt", "nephew_niece", "half_sibling", "step_sibling", "cousin", "homonym",
 ]);
 
-export function Connectors({ persons, relationships }: ConnectorsProps) {
+export function Connectors({ persons, relationships, width = 4000, height = 3000 }: ConnectorsProps) {
   const map = new Map(persons.map((p) => [p.id, p]));
 
   // Group parent→child edges: parentId → Set<childId>
@@ -230,7 +232,9 @@ export function Connectors({ persons, relationships }: ConnectorsProps) {
   return (
     <svg
       className="pointer-events-none absolute left-0 top-0 overflow-visible"
-      style={{ width: 0, height: 0 }}
+      width={width}
+      height={height}
+      style={{ width, height }}
     >
       {paths}
     </svg>
