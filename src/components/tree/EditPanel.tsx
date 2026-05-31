@@ -1,6 +1,116 @@
 import { useState } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck } from "lucide-react";
+import { relationshipsApi, personsApi } from "@/lib/api";
+import { useFamilyTreeStore } from "@/lib/store";
+
+// ─── Libellés de relations ─────────────────────────────────────────
+
+const REL_LABEL: Record<string, string> = {
+  parent:       "Parent",
+  child:        "Enfant",
+  sibling:      "Frere / Soeur",
+  half_sibling: "Demi-frere / Demi-soeur",
+  step_sibling: "Frere / Soeur par alliance",
+  step_parent:  "Beau-parent",
+  step_child:   "Beau-fils / Belle-fille",
+  spouse:       "Conjoint(e)",
+  grandparent:  "Grand-parent",
+  grandchild:   "Petit-enfant",
+  uncle_aunt:   "Oncle / Tante",
+  nephew_niece: "Neveu / Niece",
+  cousin:       "Cousin(e)",
+  homonym:      "Homonyme",
+};
+
+// ─── Onglets ───────────────────────────────────────────────────────
+
+interface RelGroup {
+  key: string;
+  label: string;
+  types: string[];
+  inferred?: boolean; // calculé sur 2 niveaux, pas de relId disponible
+}
+
+const REL_GROUPS: RelGroup[] = [
+  { key: "spouse",      label: "Conjoints",         types: ["spouse"] },
+  { key: "parent",      label: "Parents",            types: ["parent", "step_parent"] },
+  { key: "grandparent", label: "Grands-parents",     types: ["grandparent"], inferred: true },
+  { key: "sibling",     label: "Fratrie",            types: ["sibling", "half_sibling", "step_sibling"] },
+  { key: "child",       label: "Enfants",            types: ["child", "step_child"] },
+  { key: "grandchild",  label: "Petits-enfants",     types: ["grandchild"], inferred: true },
+  { key: "uncle_aunt",  label: "Oncles / Tantes",    types: ["uncle_aunt"], inferred: true },
+  { key: "nephew_niece",label: "Neveux / Nieces",    types: ["nephew_niece"], inferred: true },
+  { key: "cousin",      label: "Cousins",            types: ["cousin"], inferred: true },
+  { key: "homonym",     label: "Homonymes",          types: ["homonym"] },
+];
+
+interface RelEntry {
+  person: Person;
+  relId?: string;   // disponible seulement pour les relations directes
+  relType: string;
+  inferred: boolean;
+}
+
+function buildGroups(
+  personId: string,
+  allPersons: Person[],
+  relationships: Relationship[],
+): Record<string, RelEntry[]> {
+  const byId = new Map(allPersons.map((p) => [p.id, p]));
+
+  const directRels = relationships.filter(
+    (r) => r.personAId === personId || r.personBId === personId,
+  );
+  const otherId = (r: Relationship) =>
+    r.personAId === personId ? r.personBId : r.personAId;
+
+  // Helpers
+  const directOfType = (...types: string[]): RelEntry[] =>
+    directRels
+      .filter((r) => types.includes(r.type))
+      .flatMap((r) => {
+        const p = byId.get(otherId(r));
+        return p ? [{ person: p, relId: r.id, relType: r.type, inferred: false }] : [];
+      });
+
+  const infer = (sources: Person[], relType: string, ...types: string[]): RelEntry[] =>
+    sources.flatMap((src) =>
+      relationships
+        .filter((r) => (r.personAId === src.id || r.personBId === src.id) && types.includes(r.type))
+        .flatMap((r) => {
+          const pid = r.personAId === src.id ? r.personBId : r.personAId;
+          if (pid === personId) return [];
+          const p = byId.get(pid);
+          return p ? [{ person: p, relId: undefined, relType, inferred: true }] : [];
+        }),
+    );
+
+  const dedup = (arr: RelEntry[]): RelEntry[] =>
+    arr.filter((e, i, a) => a.findIndex((x) => x.person.id === e.person.id) === i);
+
+  const parents  = directOfType("parent", "step_parent");
+  const children = directOfType("child", "step_child");
+  const siblings = directOfType("sibling", "half_sibling", "step_sibling");
+  const unclesAunts = dedup([...directOfType("uncle_aunt"), ...infer(parents.map((e) => e.person), "uncle_aunt", "sibling", "half_sibling", "step_sibling")]);
+  const cousins     = dedup([...directOfType("cousin"),    ...infer(unclesAunts.map((e) => e.person), "cousin", "child", "step_child")]);
+  const nephewsNieces = dedup([...directOfType("nephew_niece"), ...infer(siblings.map((e) => e.person), "nephew_niece", "child", "step_child")]);
+
+  return {
+    spouse:       dedup(directOfType("spouse")),
+    parent:       dedup(parents),
+    grandparent:  dedup([...directOfType("grandparent"), ...infer(parents.map((e) => e.person), "grandparent", "parent", "step_parent")]),
+    sibling:      dedup(siblings),
+    child:        dedup(children),
+    grandchild:   dedup([...directOfType("grandchild"), ...infer(children.map((e) => e.person), "grandchild", "child", "step_child")]),
+    uncle_aunt:   unclesAunts,
+    nephew_niece: nephewsNieces,
+    cousin:       cousins,
+    homonym:      dedup(directOfType("homonym")),
+  };
+}
+
+// ─── Composant principal ───────────────────────────────────────────
 
 interface EditPanelProps {
   person: Person | null;
@@ -12,131 +122,68 @@ interface EditPanelProps {
   onEdit?: (person: Person) => void;
 }
 
-// Lien de parente etendu : on essaie d'abord les relations directes stockees,
-// puis on infere grands-parents/oncles-tantes/cousins via 2 niveaux.
-const REL_TABS = [
-  { key: "grandparent",  label: "Grands-parents" },
-  { key: "parent",       label: "Parents" },
-  { key: "sibling",      label: "Freres & Soeurs" },
-  { key: "child",        label: "Enfants" },
-  { key: "spouse",       label: "Conjoints" },
-  { key: "uncle_aunt",   label: "Oncles / Tantes" },
-  { key: "cousin",       label: "Cousins" },
-  { key: "nephew_niece", label: "Neveux / Nieces" },
-  { key: "grandchild",   label: "Petits-enfants" },
-] as const;
-
-type RelTab = (typeof REL_TABS)[number]["key"];
-
-function getRelatives(
-  personId: string,
-  allPersons: Person[],
-  relationships: Relationship[],
-): Record<RelTab, Person[]> {
-  const byId = new Map(allPersons.map((p) => [p.id, p]));
-
-  // Relations directes stockees
-  const directRels = relationships.filter(
-    (r) => r.personAId === personId || r.personBId === personId,
-  );
-  const otherId = (r: Relationship) => (r.personAId === personId ? r.personBId : r.personAId);
-
-  function directs(type: string): Person[] {
-    return directRels
-      .filter((r) => r.type === type)
-      .map((r) => byId.get(otherId(r)))
-      .filter(Boolean) as Person[];
-  }
-
-  const parents  = directs("parent");
-  const children = directs("child");
-  const siblings = directs("sibling");
-
-  // Grands-parents = parents des parents
-  const grandparents = [
-    ...directs("grandparent"),
-    ...parents.flatMap((par) =>
-      relationships
-        .filter((r) => (r.personAId === par.id || r.personBId === par.id) && r.type === "parent")
-        .map((r) => byId.get(r.personAId === par.id ? r.personBId : r.personAId))
-        .filter(Boolean) as Person[],
-    ),
-  ];
-
-  // Petits-enfants = enfants des enfants
-  const grandchildren = [
-    ...directs("grandchild"),
-    ...children.flatMap((child) =>
-      relationships
-        .filter((r) => (r.personAId === child.id || r.personBId === child.id) && r.type === "child")
-        .map((r) => byId.get(r.personAId === child.id ? r.personBId : r.personAId))
-        .filter(Boolean) as Person[],
-    ),
-  ];
-
-  // Oncles/tantes = freres/soeurs des parents
-  const unclesAunts = [
-    ...directs("uncle_aunt"),
-    ...parents.flatMap((par) =>
-      relationships
-        .filter((r) => (r.personAId === par.id || r.personBId === par.id) && r.type === "sibling")
-        .map((r) => byId.get(r.personAId === par.id ? r.personBId : r.personAId))
-        .filter(Boolean) as Person[],
-    ),
-  ];
-
-  // Cousins = enfants des oncles/tantes
-  const cousins = [
-    ...directs("cousin"),
-    ...unclesAunts.flatMap((ua) =>
-      relationships
-        .filter((r) => (r.personAId === ua.id || r.personBId === ua.id) && r.type === "child")
-        .map((r) => byId.get(r.personAId === ua.id ? r.personBId : r.personAId))
-        .filter(Boolean) as Person[],
-    ),
-  ];
-
-  // Neveux/nieces = enfants des freres/soeurs
-  const nephewsNieces = [
-    ...directs("nephew_niece"),
-    ...siblings.flatMap((sib) =>
-      relationships
-        .filter((r) => (r.personAId === sib.id || r.personBId === sib.id) && r.type === "child")
-        .map((r) => byId.get(r.personAId === sib.id ? r.personBId : r.personAId))
-        .filter(Boolean) as Person[],
-    ),
-  ];
-
-  // Deduplication
-  const dedup = (arr: Person[]) =>
-    arr.filter((p, i, a) => p.id !== personId && a.findIndex((x) => x.id === p.id) === i);
-
-  return {
-    grandparent:  dedup(grandparents),
-    parent:       dedup(parents),
-    sibling:      dedup(siblings),
-    child:        dedup(children),
-    spouse:       dedup(directs("spouse")),
-    uncle_aunt:   dedup(unclesAunts),
-    cousin:       dedup(cousins),
-    nephew_niece: dedup(nephewsNieces),
-    grandchild:   dedup(grandchildren),
-  };
-}
-
 export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
   isAuthenticated, onEdit,
 }: EditPanelProps) {
-  const [activeTab, setActiveTab] = useState<RelTab>("parent");
+  const { deleteRelationship, addRelationship, getPersonById } = useFamilyTreeStore();
+  const [activeGroup, setActiveGroup] = useState("parent");
+  const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [linkMode, setLinkMode] = useState<{ groupKey: string; relType: string } | null>(null);
+  const [linkTarget, setLinkTarget] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
 
   if (!person) return null;
 
   const fullName = [person.firstName, person.lastName].filter(Boolean).join(" ");
   const photo = person.photos[0];
-  const relatives = getRelatives(person.id, allPersons, relationships);
-  const nonEmptyTabs = REL_TABS.filter((t) => relatives[t.key].length > 0);
-  const currentTab = nonEmptyTabs.find((t) => t.key === activeTab) ? activeTab : nonEmptyTabs[0]?.key;
+  const groups = buildGroups(person.id, allPersons, relationships);
+  const nonEmptyGroups = REL_GROUPS.filter((g) => groups[g.key]?.length > 0);
+  const currentGroup = nonEmptyGroups.find((g) => g.key === activeGroup)
+    ? activeGroup
+    : nonEmptyGroups[0]?.key ?? "parent";
+
+  async function handleUnlink(relId: string) {
+    setUnlinking(relId);
+    try {
+      await relationshipsApi.delete(relId);
+      deleteRelationship(relId);
+    } finally {
+      setUnlinking(null);
+    }
+  }
+
+  async function handleLink() {
+    if (!linkMode || !linkTarget || !person) return;
+    setLinkBusy(true);
+    try {
+      const rel = await relationshipsApi.create({
+        personAId: person.id,
+        personBId: linkTarget,
+        type: linkMode.relType as Relationship["type"],
+      });
+      addRelationship(rel);
+      setLinkMode(null);
+      setLinkTarget("");
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
+  // Personnes non encore liées (pour le sélecteur "lier")
+  const linkedIds = new Set(
+    Object.values(groups).flat().map((e) => e.person.id).concat([person.id]),
+  );
+  const candidates = allPersons.filter((p) => !linkedIds.has(p.id));
+
+  // Groupes disponibles pour lier directement (pas inférés)
+  const directGroups = REL_GROUPS.filter((g) => !g.inferred);
+
+  // Options de type de relation pour un groupe donné
+  const relOptionsFor = (groupKey: string): Array<{ value: string; label: string }> => {
+    const g = REL_GROUPS.find((x) => x.key === groupKey);
+    return (g?.types ?? []).map((t) => ({ value: t, label: REL_LABEL[t] ?? t }));
+  };
 
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border/60 bg-card">
@@ -168,11 +215,21 @@ export function EditPanel({
             )}
           </div>
 
-          {/* Name */}
+          {/* Nom */}
           <div className="mb-5 text-center">
             <h3 className="font-display text-2xl font-bold text-foreground">{fullName}</h3>
             {isAuthenticated && person.nicknames && person.nicknames.length > 0 && (
               <p className="mt-0.5 text-sm text-primary/80">&laquo; {person.nicknames.join(", ")} &raquo;</p>
+            )}
+            {/* Badge homonyme */}
+            {groups.homonym?.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap justify-center gap-1">
+                {groups.homonym.map((e) => (
+                  <span key={e.person.id} className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                    Homonyme de {e.person.firstName} {e.person.lastName}
+                  </span>
+                ))}
+              </div>
             )}
             {!isAuthenticated && (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -181,7 +238,7 @@ export function EditPanel({
             )}
           </div>
 
-          {/* Details */}
+          {/* Détails — auth seulement */}
           {isAuthenticated && (
             <div className="mb-5 space-y-2 text-sm">
               {(person.birthDate || person.deathDate) && (
@@ -198,8 +255,6 @@ export function EditPanel({
               )}
             </div>
           )}
-
-          {/* City seule pour visiteurs */}
           {!isAuthenticated && person.cityOfOrigin && (
             <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="size-3.5 shrink-0" />
@@ -207,7 +262,7 @@ export function EditPanel({
             </div>
           )}
 
-          {/* Photo gallery — auth uniquement */}
+          {/* Photos */}
           {isAuthenticated && person.photos.length > 0 && (
             <div className="mb-5">
               <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -221,7 +276,7 @@ export function EditPanel({
             </div>
           )}
 
-          {/* Audio — auth uniquement */}
+          {/* Audio */}
           {isAuthenticated && person.audios.length > 0 && (
             <div className="mb-5">
               <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -237,53 +292,130 @@ export function EditPanel({
         </div>
 
         {/* ── Onglets famille ───────────────────────────────── */}
-        {nonEmptyTabs.length > 0 && (
-          <div className="border-t border-border/60">
-            {/* Tab bar */}
-            <div className="flex overflow-x-auto border-b border-border/60 px-2 pt-1 scrollbar-none">
-              {nonEmptyTabs.map((t) => (
+        <div className="border-t border-border/60">
+          {/* Tab bar */}
+          <div className="flex overflow-x-auto border-b border-border/60 px-2 pt-1 scrollbar-none">
+            {REL_GROUPS.map((g) => {
+              const count = groups[g.key]?.length ?? 0;
+              return (
                 <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
+                  key={g.key}
+                  onClick={() => setActiveGroup(g.key)}
                   className={`shrink-0 whitespace-nowrap rounded-t-lg px-3 py-2 text-xs font-medium transition-colors ${
-                    currentTab === t.key
+                    currentGroup === g.key
                       ? "border-b-2 border-primary text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                      : count > 0
+                      ? "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground/40 hover:text-muted-foreground"
                   }`}
                 >
-                  {t.label}
-                  <span className="ml-1 text-[10px] opacity-60">
-                    ({relatives[t.key].length})
-                  </span>
+                  {g.label}
+                  {count > 0 && (
+                    <span className="ml-1 text-[10px] opacity-60">({count})</span>
+                  )}
                 </button>
-              ))}
-            </div>
-
-            {/* Tab content */}
-            <div className="space-y-1.5 p-3">
-              {currentTab &&
-                relatives[currentTab].map((rel) => (
-                  <button
-                    key={rel.id}
-                    onClick={() => onSelectPerson(rel.id)}
-                    className="flex w-full items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-muted"
-                  >
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                      {rel.firstName?.[0]?.toUpperCase() ?? "?"}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {[rel.firstName, rel.lastName].filter(Boolean).join(" ")}
-                      </p>
-                      {rel.cityOfOrigin && (
-                        <p className="truncate text-[10px] text-muted-foreground">{rel.cityOfOrigin}</p>
-                      )}
-                    </div>
-                  </button>
-                ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+
+          {/* Tab content */}
+          <div className="space-y-1.5 p-3">
+            {(groups[currentGroup] ?? []).map((entry) => (
+              <div key={entry.person.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => onSelectPerson(entry.person.id)}
+                  className="flex flex-1 items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-muted min-w-0"
+                >
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                    {entry.person.firstName?.[0]?.toUpperCase() ?? "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {[entry.person.firstName, entry.person.lastName].filter(Boolean).join(" ")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {REL_LABEL[entry.relType] ?? entry.relType}
+                      {entry.inferred && " ·"}
+                      {entry.inferred && <span className="italic opacity-60"> déduit</span>}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Bouton dissocier — seulement pour liens directs */}
+                {isAuthenticated && entry.relId && (
+                  <button
+                    onClick={() => handleUnlink(entry.relId!)}
+                    disabled={unlinking === entry.relId}
+                    title="Dissocier ce lien"
+                    className="grid size-8 shrink-0 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                  >
+                    {unlinking === entry.relId ? (
+                      <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                    ) : (
+                      <Unlink className="size-3.5" />
+                    )}
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {/* Bouton lier une personne (auth + onglet direct) */}
+            {isAuthenticated && directGroups.some((g) => g.key === currentGroup) && (
+              <>
+                {linkMode?.groupKey === currentGroup ? (
+                  <div className="mt-2 space-y-2 rounded-xl border border-border bg-background/50 p-3">
+                    <select
+                      autoFocus
+                      value={linkMode.relType}
+                      onChange={(e) => setLinkMode({ groupKey: currentGroup, relType: e.target.value })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                    >
+                      {relOptionsFor(currentGroup).map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={linkTarget}
+                      onChange={(e) => setLinkTarget(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                    >
+                      <option value="">Choisir une personne…</option>
+                      {candidates.map((p) => (
+                        <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setLinkMode(null); setLinkTarget(""); }}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={handleLink}
+                        disabled={!linkTarget || linkBusy}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary/10 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                      >
+                        <UserCheck className="size-3.5" /> Lier
+                      </button>
+                    </div>
+                  </div>
+                ) : candidates.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const defaultType = REL_GROUPS.find((g) => g.key === currentGroup)?.types[0] ?? currentGroup;
+                      setLinkMode({ groupKey: currentGroup, relType: defaultType });
+                      setLinkTarget("");
+                    }}
+                    className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                  >
+                    <Plus className="size-3.5" /> Lier une personne
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Actions */}

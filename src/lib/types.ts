@@ -26,7 +26,10 @@ export interface Relationship {
   id: string;
   personAId: string;
   personBId: string;
-  type: "parent" | "child" | "sibling" | "spouse";
+  type: "parent" | "child" | "sibling" | "spouse"
+      | "half_sibling" | "step_sibling" | "step_parent" | "step_child"
+      | "grandparent" | "grandchild" | "uncle_aunt" | "nephew_niece" | "cousin"
+      | "homonym";
 }
 
 export interface FamilyTree {
