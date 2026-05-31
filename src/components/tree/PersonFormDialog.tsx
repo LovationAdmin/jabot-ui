@@ -479,8 +479,11 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             {step === "parents" && (
               <RelativesStep
                 title="Ajoutez les parents si vous les connaissez"
-                hint="Père, mère, ou les deux."
-                relTypeOptions={[{ value: "parent", label: "Parent" }]}
+                hint="Père, mère, beau-parent, ou les deux."
+                relTypeOptions={[
+                  { value: "parent", label: "Parent" },
+                  { value: "step_parent", label: "Beau-parent / Parent par alliance" },
+                ]}
                 defaultRelType="parent"
                 entries={parents}
                 setEntries={setParents}
@@ -497,7 +500,11 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             {step === "siblings" && (
               <RelativesStep
                 title="Ajoutez les frères et sœurs si vous les connaissez"
-                relTypeOptions={[{ value: "sibling", label: "Frère / Sœur" }]}
+                relTypeOptions={[
+                  { value: "sibling", label: "Frère / Sœur" },
+                  { value: "half_sibling", label: "Demi-frère / Demi-sœur" },
+                  { value: "step_sibling", label: "Frère / Sœur par alliance" },
+                ]}
                 defaultRelType="sibling"
                 entries={siblings}
                 setEntries={setSiblings}
@@ -516,13 +523,15 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 title="Ajoutez d'autres proches"
                 hint="Vous pourrez toujours en ajouter plus tard."
                 relTypeOptions={[
+                  { value: "spouse", label: "Conjoint(e)" },
+                  { value: "child", label: "Enfant" },
+                  { value: "step_child", label: "Beau-fils / Belle-fille" },
                   { value: "grandparent", label: "Grand-parent" },
                   { value: "grandchild", label: "Petit-enfant" },
                   { value: "uncle_aunt", label: "Oncle / Tante" },
                   { value: "nephew_niece", label: "Neveu / Nièce" },
                   { value: "cousin", label: "Cousin(e)" },
-                  { value: "spouse", label: "Conjoint(e)" },
-                  { value: "child", label: "Enfant" },
+                  { value: "homonym", label: "Homonyme" },
                 ]}
                 defaultRelType="grandparent"
                 entries={relatives}
