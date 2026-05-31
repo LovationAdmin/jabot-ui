@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft, GitMerge, SkipForward } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
 import { authApi, personsApi, relationshipsApi, mergeApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 import { Person, SearchResult } from "@/lib/types";
 
-type Step = "identity" | "origins" | "results" | "merge";
+type Step = "identity" | "origins" | "results";
 
 const STEPS: Step[] = ["identity", "origins", "results"];
 
@@ -12,7 +12,6 @@ const STEP_LABELS: Record<Step, string> = {
   identity: "Qui etes-vous ?",
   origins: "Vos origines",
   results: "Votre fiche",
-  merge: "Doublons detectes",
 };
 
 interface Props {
@@ -31,6 +30,23 @@ function parseNames(raw: string): Array<{ firstName: string; lastName: string }>
     });
 }
 
+// Un vrai doublon ne se limite pas au nom : on exige des signaux concordants
+// supplementaires (date de naissance identique et/ou parents en commun), que
+// le moteur de recherche backend remonte deja dans matchReasons.
+function isLikelyDuplicate(r: SearchResult): boolean {
+  const reasons = r.matchReasons.map((s) => s.toLowerCase());
+  const sameBirth = reasons.some((s) => s.includes("naissance") || s.includes("birth") || s.includes("date"));
+  const sharedParent = reasons.some((s) => s.includes("parent") || s.includes("pere") || s.includes("père") || s.includes("mere") || s.includes("mère"));
+  const nameMatch = reasons.some((s) => s.includes("nom") || s.includes("prenom") || s.includes("prénom") || s.includes("name"));
+
+  // Doublon certain : tres forte confiance ET au moins un signal fort
+  // (date de naissance ou parent commun) en plus du nom.
+  if (r.confidence >= 0.85 && (sameBirth || sharedParent)) return true;
+  // Sinon confiance quasi parfaite avec concordance nom + date + parent.
+  if (r.confidence >= 0.95 && nameMatch && sameBirth && sharedParent) return true;
+  return false;
+}
+
 export function OnboardingDialog({ onCompleted }: Props) {
   const { setOnboarded } = useAuthStore();
   const { addPerson, addRelationship, loadTree } = useFamilyTreeStore();
@@ -42,13 +58,12 @@ export function OnboardingDialog({ onCompleted }: Props) {
     lastName: "",
     nickname: "",
     gender: "other" as Person["gender"],
+    birthDate: "",
     cityOfOrigin: "",
     parentNames: "",
     siblingNames: "",
   });
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
-  const [pendingDuplicates, setPendingDuplicates] = useState<SearchResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +84,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
       const matches = await personsApi.search({
         name: fullName || undefined,
         nickname: form.nickname.trim() || undefined,
+        birth_date: form.birthDate || undefined,
         parent_names: splitList(form.parentNames),
         sibling_names: splitList(form.siblingNames),
         city_of_origin: form.cityOfOrigin.trim() || undefined,
@@ -98,6 +114,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
       if (form.lastName.trim()) patch.lastName = form.lastName.trim();
       if (form.nickname.trim()) patch.nicknames = [form.nickname.trim()];
       if (form.gender !== "other") patch.gender = form.gender;
+      if (form.birthDate) patch.birthDate = form.birthDate;
       if (form.cityOfOrigin.trim()) patch.cityOfOrigin = form.cityOfOrigin.trim();
       if (Object.keys(patch).length > 0) {
         try { await personsApi.update(personId, patch); } catch { /* silencieux */ }
@@ -125,42 +142,23 @@ export function OnboardingDialog({ onCompleted }: Props) {
         setOnboarded(me.personId, form.firstName.trim() || linked?.firstName);
       }
 
-      // 4. Proposer de fusionner les autres résultats à forte confiance
+      // 4. Fusionner automatiquement les vrais doublons dans la fiche choisie
+      //    (aucun tri manuel : un doublon = même personne selon nom + date de
+      //    naissance + parents, voir isLikelyDuplicate).
       const duplicates = results.filter(
-        (r) => r.person.id !== personId && r.confidence >= 0.7,
+        (r) => r.person.id !== personId && isLikelyDuplicate(r),
       );
-      setLinkedPersonId(personId);
-      if (duplicates.length > 0) {
-        setPendingDuplicates(duplicates);
-        setDirection("forward");
-        setStep("merge");
-      } else {
-        await loadTree();
-        onCompleted?.(personId);
+      for (const dup of duplicates) {
+        try { await mergeApi.merge(dup.person.id, personId); } catch { /* silencieux */ }
       }
+
+      await loadTree();
+      onCompleted?.(personId);
     } catch {
       setError("Impossible de vous rattacher a cette fiche. Reessayez.");
     } finally {
       setBusy(false);
     }
-  }
-
-  async function handleMergeDuplicate(sourceId: string) {
-    if (!linkedPersonId) return;
-    setBusy(true);
-    try {
-      await mergeApi.merge(sourceId, linkedPersonId);
-      setPendingDuplicates((ds) => ds.filter((d) => d.person.id !== sourceId));
-    } catch {
-      setError("Echec de la fusion. Reessayez.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleFinishMerge() {
-    await loadTree();
-    if (linkedPersonId) onCompleted?.(linkedPersonId);
   }
 
   async function handleCreate() {
@@ -173,6 +171,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
         lastName: form.lastName.trim() || undefined,
         nicknames: form.nickname.trim() ? [form.nickname.trim()] : undefined,
         gender: form.gender,
+        birthDate: form.birthDate || undefined,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
       addPerson(created);
@@ -273,6 +272,11 @@ export function OnboardingDialog({ onCompleted }: Props) {
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Surnom / petit nom</label>
                     <input value={form.nickname} onChange={(e) => field("nickname", e.target.value)} placeholder="Ami" className={inputCls} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Date de naissance</label>
+                    <input type="date" value={form.birthDate} onChange={(e) => field("birthDate", e.target.value)} className={inputCls} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -442,58 +446,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     Modifier mes informations
                   </button>
                 </div>
-              </>
-            )}
-
-            {/* ── Step merge : Fusion des doublons ──────────────── */}
-            {step === "merge" && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Ces fiches semblent egalement vous correspondre. Vous pouvez les fusionner dans votre fiche pour nettoyer les doublons — vos relations et medias seront conserves.
-                </p>
-
-                {error && (
-                  <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-                )}
-
-                {pendingDuplicates.length > 0 ? (
-                  <div className="space-y-2">
-                    {pendingDuplicates.map((r) => (
-                      <div key={r.person.id} className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-900/10 p-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {r.person.firstName} {r.person.lastName}
-                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">{Math.round(r.confidence * 100)}% similaire</span>
-                          </p>
-                          {r.matchReasons.length > 0 && (
-                            <p className="truncate text-xs text-muted-foreground">{r.matchReasons.join(" · ")}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleMergeDuplicate(r.person.id)}
-                          disabled={busy}
-                          className="shrink-0 flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
-                        >
-                          {busy ? <Loader2 className="size-3 animate-spin" /> : <GitMerge className="size-3.5" />}
-                          Fusionner
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-green-200 bg-green-50/50 dark:border-green-900/40 dark:bg-green-900/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-                    Tous les doublons ont ete fusionnes.
-                  </div>
-                )}
-
-                <button
-                  onClick={handleFinishMerge}
-                  disabled={busy}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : <SkipForward className="size-4" />}
-                  {pendingDuplicates.length > 0 ? "Ignorer et terminer" : "Terminer"}
-                </button>
               </>
             )}
           </div>
