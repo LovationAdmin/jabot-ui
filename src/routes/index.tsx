@@ -348,7 +348,7 @@ function JabotCanvas() {
               }}
               className="absolute left-0 top-0"
             >
-              <Connectors persons={tree.persons} relationships={tree.relationships} />
+              <Connectors persons={tree.persons} relationships={tree.relationships} width={WORLD.w} height={WORLD.h} />
               {tree.persons.map((p) => (
                 <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} isAuthenticated={isAuthenticated} />
               ))}
