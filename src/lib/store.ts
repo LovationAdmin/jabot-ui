@@ -66,6 +66,8 @@ export const useAuthStore = create<AuthStore>()(
 interface FamilyTreeStore {
   tree: FamilyTree;
   isLoading: boolean;
+  // true pendant les nouvelles tentatives : le serveur (plan gratuit) se réveille.
+  isWakingServer: boolean;
   error: string | null;
   selectedPersonId: string | null;
 
@@ -82,23 +84,39 @@ interface FamilyTreeStore {
 export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   tree: { persons: [], relationships: [] },
   isLoading: false,
+  isWakingServer: false,
   error: null,
   selectedPersonId: null,
 
+  // Charge l'arbre avec plusieurs tentatives + backoff. Le plan gratuit Render
+  // met le serveur en veille après inactivité : un cold start prend 30-60s.
+  // On réessaie donc au lieu d'afficher tout de suite une erreur.
   loadTree: async () => {
-    set({ isLoading: true });
-    try {
-      const result = await treeApi.getTree();
-      set({ tree: result, error: null });
-    } catch {
-      // Ne pas écraser l'arbre déjà chargé si on avait des données
-      set((s) => ({
-        tree: s.tree.persons.length > 0 ? s.tree : { persons: [], relationships: [] },
-        error: "unreachable",
-      }));
-    } finally {
-      set({ isLoading: false });
+    const delays = [0, 3000, 6000, 12000, 20000]; // ~41s cumulés, couvre un cold start
+    set({ isLoading: true, isWakingServer: false });
+
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > 0) {
+        // À partir de la 2e tentative, on signale que le serveur se réveille.
+        set({ isWakingServer: true });
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
+      try {
+        const result = await treeApi.getTree();
+        set({ tree: result, error: null, isLoading: false, isWakingServer: false });
+        return;
+      } catch {
+        // On continue d'essayer tant qu'il reste des tentatives.
+      }
     }
+
+    // Toutes les tentatives ont échoué : on conserve l'arbre déjà chargé s'il existe.
+    set((s) => ({
+      tree: s.tree.persons.length > 0 ? s.tree : { persons: [], relationships: [] },
+      error: "unreachable",
+      isLoading: false,
+      isWakingServer: false,
+    }));
   },
 
   addPerson: (person) => set((s) => ({ tree: { ...s.tree, persons: [...s.tree.persons, person] } })),

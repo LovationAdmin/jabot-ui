@@ -29,7 +29,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
+  const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
   const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -264,9 +264,18 @@ function JabotCanvas() {
           {/* Loading */}
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex max-w-xs flex-col items-center gap-3 text-center">
                 <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <p className="text-sm text-muted-foreground">Chargement…</p>
+                {isWakingServer ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">Réveil du serveur…</p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Le serveur se rallume, cela peut prendre une minute. Merci de patienter.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Chargement…</p>
+                )}
               </div>
             </div>
           )}
