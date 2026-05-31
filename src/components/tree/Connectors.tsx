@@ -1,4 +1,5 @@
 import { Person, Relationship } from "@/lib/types";
+import { FamilyColor } from "@/lib/familyColors";
 import { CARD_W, CARD_H } from "./PersonCard";
 
 interface ConnectorsProps {
@@ -6,6 +7,7 @@ interface ConnectorsProps {
   relationships: Relationship[];
   width?: number;
   height?: number;
+  familyColors?: Map<string, FamilyColor>;
 }
 
 function bottom(p: Person) {
@@ -25,8 +27,14 @@ const DASHED_TYPES = new Set([
   "uncle_aunt", "nephew_niece", "half_sibling", "step_sibling", "cousin", "homonym",
 ]);
 
-export function Connectors({ persons, relationships, width = 4000, height = 3000 }: ConnectorsProps) {
+export function Connectors({ persons, relationships, width = 4000, height = 3000, familyColors }: ConnectorsProps) {
   const map = new Map(persons.map((p) => [p.id, p]));
+
+  // Stroke color for a relationship: use the family color of either endpoint.
+  const relStroke = (idA: string, idB: string, alpha = "88"): string => {
+    const c = familyColors?.get(idA) ?? familyColors?.get(idB);
+    return c ? `${c.border}${alpha}` : `oklch(0.45 0.12 55 / 0.55)`;
+  };
 
   // Group parent→child edges: parentId → Set<childId>
   const childrenOf = new Map<string, string[]>();
@@ -78,7 +86,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           <path
             key={key}
             d={`M ${parentBottom.x} ${parentBottom.y} C ${parentBottom.x} ${my}, ${childTop.x} ${my}, ${childTop.x} ${childTop.y}`}
-            stroke="oklch(0.45 0.12 55 / 0.55)"
+            stroke={relStroke(parentId, children[0].id)}
             strokeWidth="1.5"
             fill="none"
           />
@@ -90,19 +98,18 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
       const minX = Math.min(...childTops.map((t) => t.x));
       const maxX = Math.max(...childTops.map((t) => t.x));
       const forkY = childTops[0].y - (childTops[0].y - parentBottom.y) * 0.45;
+      const forkStroke = relStroke(parentId, childIds[0]);
 
-      // Vertical stem from parent down to fork
       paths.push(
         <line
           key={`stem-${parentId}`}
           x1={parentBottom.x} y1={parentBottom.y}
           x2={parentBottom.x} y2={forkY}
-          stroke="oklch(0.45 0.12 55 / 0.55)"
+          stroke={forkStroke}
           strokeWidth="1.5"
         />
       );
 
-      // Horizontal bar connecting all children
       const barLeft = Math.min(minX, parentBottom.x);
       const barRight = Math.max(maxX, parentBottom.x);
       paths.push(
@@ -110,12 +117,11 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           key={`bar-${parentId}`}
           x1={barLeft} y1={forkY}
           x2={barRight} y2={forkY}
-          stroke="oklch(0.45 0.12 55 / 0.55)"
+          stroke={forkStroke}
           strokeWidth="1.5"
         />
       );
 
-      // Vertical drops from bar to each child top
       for (const child of children) {
         const ct = top(child);
         const key = `pc-${parentId}-${child.id}`;
@@ -126,7 +132,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
               key={key}
               x1={ct.x} y1={forkY}
               x2={ct.x} y2={ct.y}
-              stroke="oklch(0.45 0.12 55 / 0.55)"
+              stroke={forkStroke}
               strokeWidth="1.5"
             />
           );
@@ -150,11 +156,14 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const ca = center(a);
     const cb = center(b);
     const mx = (ca.x + cb.x) / 2;
+    // Conjoints : couleur légèrement différente (teinte rosée propre à la famille)
+    const sc = familyColors?.get(rel.personAId) ?? familyColors?.get(rel.personBId);
+    const spouseStroke = sc ? `${sc.accent}99` : "oklch(0.60 0.18 20 / 0.50)";
     paths.push(
       <path
         key={`spouse-${rel.id}`}
         d={`M ${ca.x} ${ca.y} C ${mx} ${ca.y}, ${mx} ${cb.y}, ${cb.x} ${cb.y}`}
-        stroke="oklch(0.60 0.18 20 / 0.50)"
+        stroke={spouseStroke}
         strokeWidth="1.5"
         strokeDasharray="5 3"
         fill="none"
@@ -178,11 +187,12 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const dashed = DASHED_TYPES.has(rel.type);
     const ca = center(a);
     const cb = center(b);
+    const hs = relStroke(rel.personAId, rel.personBId, "55");
     paths.push(
       <line
         key={`horiz-${rel.id}`}
         x1={ca.x} y1={ca.y} x2={cb.x} y2={cb.y}
-        stroke="oklch(0.52 0.015 60 / 0.30)"
+        stroke={hs}
         strokeWidth="1"
         strokeDasharray={dashed ? "4 3" : undefined}
       />
@@ -197,6 +207,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const a = map.get(rel.personAId);
     const b = map.get(rel.personBId);
     if (!a || !b) continue;
+    const es = relStroke(rel.personAId, rel.personBId, "44");
 
     if (VERTICAL_DOWN.includes(rel.type)) {
       const from = bottom(a);
@@ -206,7 +217,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
         <path
           key={`vd-${rel.id}`}
           d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
-          stroke="oklch(0.35 0.05 55 / 0.30)"
+          stroke={es}
           strokeWidth="1"
           strokeDasharray="5 3"
           fill="none"
@@ -220,7 +231,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
         <path
           key={`vu-${rel.id}`}
           d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
-          stroke="oklch(0.35 0.05 55 / 0.30)"
+          stroke={es}
           strokeWidth="1"
           strokeDasharray="5 3"
           fill="none"
