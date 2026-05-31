@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { MapPin, Music, Lock } from "lucide-react";
 
 export const CARD_W = 208;
-export const CARD_H = 100;
+export const CARD_H = 112;
 
 interface PersonCardProps {
   person: Person;
@@ -73,7 +73,7 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-[15px] font-semibold leading-snug text-card-foreground">{fullName}</p>
+        <p className="line-clamp-2 break-words font-display text-[14px] font-semibold leading-tight text-card-foreground">{fullName}</p>
         {isAuthenticated && person.nicknames && person.nicknames.length > 0 && (
           <p className="truncate text-[11px]" style={familyColor ? { color: familyColor.accent } : { color: "var(--color-primary)" }}>
             &laquo; {person.nicknames[0]} &raquo;
