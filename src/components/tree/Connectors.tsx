@@ -171,8 +171,12 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     );
   }
 
-  // ── Sibling / horizontal connectors (non-parent types) ───────────
-  const HORIZONTAL_TYPES = new Set(["sibling", "half_sibling", "step_sibling", "cousin", "homonym"]);
+  // ── Sibling connectors ────────────────────────────────────────────
+  // On ne trace QUE la fratrie directe. Les liens cousins/homonymes et les
+  // liens étendus (grands-parents, oncles/tantes, neveux…) sont déduits et
+  // restent consultables dans la fiche : les dessiner ici surchargerait le
+  // canvas de courbes croisées illisibles.
+  const HORIZONTAL_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
   const drawnHoriz = new Set<string>();
 
   for (const rel of relationships) {
@@ -199,46 +203,10 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     );
   }
 
-  // ── Extended vertical types (grandparent, uncle, etc.) ────────────
-  const VERTICAL_DOWN = ["grandparent", "step_parent", "uncle_aunt"];
-  const VERTICAL_UP = ["grandchild", "step_child", "nephew_niece"];
-
-  for (const rel of relationships) {
-    const a = map.get(rel.personAId);
-    const b = map.get(rel.personBId);
-    if (!a || !b) continue;
-    const es = relStroke(rel.personAId, rel.personBId, 0.3);
-
-    if (VERTICAL_DOWN.includes(rel.type)) {
-      const from = bottom(a);
-      const to = top(b);
-      const my = (from.y + to.y) / 2;
-      paths.push(
-        <path
-          key={`vd-${rel.id}`}
-          d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
-          stroke={es}
-          strokeWidth="1"
-          strokeDasharray="5 3"
-          fill="none"
-        />
-      );
-    } else if (VERTICAL_UP.includes(rel.type)) {
-      const from = top(a);
-      const to = bottom(b);
-      const my = (from.y + to.y) / 2;
-      paths.push(
-        <path
-          key={`vu-${rel.id}`}
-          d={`M ${from.x} ${from.y} C ${from.x} ${my}, ${to.x} ${my}, ${to.x} ${to.y}`}
-          stroke={es}
-          strokeWidth="1"
-          strokeDasharray="5 3"
-          fill="none"
-        />
-      );
-    }
-  }
+  // Note : les liens étendus (grand-parent, oncle/tante, neveu/nièce,
+  // beau-parent…) ne sont volontairement PAS tracés — ils sont déductibles
+  // de la chaîne parent→enfant et alourdissaient la lecture du canvas. Ils
+  // restent visibles et éditables dans la fiche de chaque personne.
 
   return (
     <svg

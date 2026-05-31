@@ -184,7 +184,11 @@ export function EditPanel({
   const photo = person.photos[0];
   const groups = buildGroups(person.id, allPersons, relationships);
   const nonEmptyGroups = REL_GROUPS.filter((g) => groups[g.key]?.length > 0);
-  const currentGroup = nonEmptyGroups.find((g) => g.key === activeGroup)
+  // L'onglet actif est respecté tant qu'il correspond à un groupe valide —
+  // y compris un groupe vide (ex: « Enfants » sans enfant encore lié), pour
+  // pouvoir y rattacher une personne. À défaut, on retombe sur le premier
+  // groupe non vide, sinon « Parents ».
+  const currentGroup = REL_GROUPS.find((g) => g.key === activeGroup)
     ? activeGroup
     : nonEmptyGroups[0]?.key ?? "parent";
 
@@ -380,6 +384,15 @@ export function EditPanel({
 
           {/* Tab content */}
           <div className="space-y-1.5 p-3">
+            {/* État vide pour un groupe direct : invite à rattacher */}
+            {isAuthenticated
+              && (groups[currentGroup]?.length ?? 0) === 0
+              && directGroups.some((g) => g.key === currentGroup)
+              && linkMode?.groupKey !== currentGroup && (
+              <p className="px-1 py-2 text-center text-xs text-muted-foreground">
+                Aucun lien pour le moment. Rattachez une personne existante ci-dessous.
+              </p>
+            )}
             {(groups[currentGroup] ?? []).map((entry) => (
               <div key={entry.person.id} className="flex items-center gap-2">
                 <button
