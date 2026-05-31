@@ -163,6 +163,7 @@ export const authApi = {
 // ─── Tree ────────────────────────────────────────────────────────
 
 export const treeApi = {
+  // Endpoint public — fonctionne avec ou sans token.
   getTree: async (): Promise<FamilyTree> => {
     const { data } = await apiClient.get<{ nodes: TreeNode[]; edges: TreeEdge[] }>("/tree");
 

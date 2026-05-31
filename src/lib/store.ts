@@ -7,9 +7,10 @@ import { treeApi } from "./api";
 
 interface AuthStore extends AuthState {
   personId?: string;
+  firstName?: string;
   onboarded: boolean;
-  login: (token: string, userId: string, phone: string, opts?: { personId?: string | null; onboarded?: boolean }) => void;
-  setOnboarded: (personId: string) => void;
+  login: (token: string, userId: string, phone: string, opts?: { personId?: string | null; onboarded?: boolean; firstName?: string }) => void;
+  setOnboarded: (personId: string, firstName?: string) => void;
   logout: () => void;
 }
 
@@ -21,6 +22,7 @@ export const useAuthStore = create<AuthStore>()(
       phone: undefined,
       token: undefined,
       personId: undefined,
+      firstName: undefined,
       onboarded: false,
 
       login: (token, userId, phone, opts) => {
@@ -31,15 +33,16 @@ export const useAuthStore = create<AuthStore>()(
           userId,
           phone,
           personId: opts?.personId ?? undefined,
+          firstName: opts?.firstName ?? undefined,
           onboarded: opts?.onboarded ?? false,
         });
       },
 
-      setOnboarded: (personId) => set({ personId, onboarded: true }),
+      setOnboarded: (personId, firstName) => set({ personId, firstName, onboarded: true }),
 
       logout: () => {
         if (typeof window !== "undefined") localStorage.removeItem("jabot_token");
-        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined, personId: undefined, onboarded: false });
+        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined, personId: undefined, firstName: undefined, onboarded: false });
       },
     }),
     {
@@ -50,6 +53,7 @@ export const useAuthStore = create<AuthStore>()(
         phone: state.phone,
         token: state.token,
         personId: state.personId,
+        firstName: state.firstName,
         onboarded: state.onboarded,
       }),
       skipHydration: true,
