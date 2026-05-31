@@ -29,7 +29,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
+  const { tree, isLoading, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
   const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -271,8 +271,27 @@ function JabotCanvas() {
             </div>
           )}
 
-          {/* Empty state */}
-          {!isLoading && tree.persons.length === 0 && (
+          {/* Empty state — erreur réseau */}
+          {!isLoading && tree.persons.length === 0 && treeError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="text-6xl">⚠️</div>
+                <h2 className="font-serif text-2xl text-foreground">Impossible de charger l'arbre</h2>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  Le serveur est momentanement inaccessible. Verifiez votre connexion et reessayez.
+                </p>
+                <button
+                  onClick={() => loadTree()}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  Reessayer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state — arbre vraiment vide */}
+          {!isLoading && tree.persons.length === 0 && !treeError && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="text-7xl">🌳</div>

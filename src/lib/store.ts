@@ -91,7 +91,11 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
       const result = await treeApi.getTree();
       set({ tree: result, error: null });
     } catch {
-      set({ tree: { persons: [], relationships: [] }, error: "unreachable" });
+      // Ne pas écraser l'arbre déjà chargé si on avait des données
+      set((s) => ({
+        tree: s.tree.persons.length > 0 ? s.tree : { persons: [], relationships: [] },
+        error: "unreachable",
+      }));
     } finally {
       set({ isLoading: false });
     }
