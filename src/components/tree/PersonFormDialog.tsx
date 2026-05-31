@@ -59,7 +59,7 @@ const SIBLING_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
 // ─── Main component ────────────────────────────────────────────────
 
 export function PersonFormDialog({ mode, person, onClose }: Props) {
-  const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship } = useFamilyTreeStore();
+  const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship, loadTree } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -202,6 +202,8 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
       for (const f of photoFiles) await mediaApi.upload(pid, "photo", f);
       for (const f of audioFiles) await mediaApi.upload(pid, "audio", f);
 
+      // Refresh tree so the person card data is up-to-date without a full reload.
+      loadTree().catch(() => {});
       goTo("parents", "forward");
     } catch {
       setError("Echec de l'enregistrement. Reessayez.");
@@ -219,12 +221,18 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
       await relationshipsApi.delete(relId);
       deleteRelationship(relId);
       setter((prev) => prev.filter((d) => d.relId !== relId));
+      loadTree();
     } catch {
       // keep in list silently
     }
   }
 
   // ── Save relatives then advance ────────────────────────────────
+  // For directional types (parent, child, grandparent…), the draft's relType
+  // describes what the OTHER person is to the CURRENT person.
+  // Convention: type "parent" means personAId IS PARENT OF personBId.
+  // So if other is current's parent → store (personAId=other, personBId=current, type="parent").
+  // For symmetric types (spouse, sibling…) order doesn't matter.
   async function commitDrafts(drafts: PersonDraft[], nextStep: () => void) {
     const newDrafts = drafts.filter((d) => !d.relId);
     const currentId = savedId ?? person?.id;
@@ -233,10 +241,16 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     setError(null);
     try {
       for (const d of newDrafts) {
+        // For directional types, the other person goes in personAId slot so
+        // that effectiveTypeFor(r, currentId) returns d.relType correctly.
+        const isDirectional = d.relType in INVERSE;
+
         if (d.existingId) {
+          const aId = isDirectional ? d.existingId : currentId;
+          const bId = isDirectional ? currentId : d.existingId;
           const rel = await relationshipsApi.create({
-            personAId: currentId,
-            personBId: d.existingId,
+            personAId: aId,
+            personBId: bId,
             type: d.relType as Relationship["type"],
           });
           addRelationship(rel);
@@ -247,9 +261,11 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
             gender: d.gender,
           });
           addPerson(created);
+          const aId = isDirectional ? created.id : currentId;
+          const bId = isDirectional ? currentId : created.id;
           const rel = await relationshipsApi.create({
-            personAId: currentId,
-            personBId: created.id,
+            personAId: aId,
+            personBId: bId,
             type: d.relType as Relationship["type"],
           });
           addRelationship(rel);
@@ -271,6 +287,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
       await personsApi.delete(person.id);
       deletePerson(person.id);
       onClose();
+      loadTree().catch(() => {});
     } catch {
       setError("Echec de la suppression.");
     } finally {
@@ -609,7 +626,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 error={error}
                 busy={busy}
                 onBack={() => goTo("siblings", "back")}
-                onNext={() => commitDrafts(relatives, onClose)}
+                onNext={() => commitDrafts(relatives, () => { loadTree(); onClose(); })}
                 onRemoveExisting={(relId) => removeExistingRel(relId, setRelatives)}
                 isLastStep
                 inputCls={inputCls}
