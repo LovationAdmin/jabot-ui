@@ -17,6 +17,18 @@ const PALETTE = [
 
 export type FamilyColor = (typeof PALETTE)[number];
 
+/**
+ * Applique une opacité (0-1) à une couleur oklch.
+ * oklch(0.65 0.18 55) → oklch(0.65 0.18 55 / 0.5)
+ * IMPORTANT : on ne peut PAS juste concaténer un suffixe hex à une couleur
+ * oklch (ça produit du CSS invalide → la couleur est ignorée).
+ */
+export function alpha(color: string, a: number): string {
+  const m = color.match(/^oklch\(([^)]+)\)$/);
+  if (m) return `oklch(${m[1]} / ${a})`;
+  return color;
+}
+
 /** Union-Find simple pour calculer les composantes connexes. */
 function buildComponentMap(persons: Person[], relationships: Relationship[]): Map<string, string> {
   const parent = new Map<string, string>();
