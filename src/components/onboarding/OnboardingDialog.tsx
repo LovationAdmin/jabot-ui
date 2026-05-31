@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
-import { authApi, personsApi } from "@/lib/api";
+import { authApi, personsApi, relationshipsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 import { Person, SearchResult } from "@/lib/types";
 
@@ -18,9 +18,21 @@ interface Props {
   onCompleted?: (personId: string) => void;
 }
 
+// Parse "Mamadou Diallo, Fatou Sow" → [{ firstName, lastName }]
+function parseNames(raw: string): Array<{ firstName: string; lastName: string }> {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const parts = s.split(" ");
+      return { firstName: parts[0] ?? s, lastName: parts.slice(1).join(" ") };
+    });
+}
+
 export function OnboardingDialog({ onCompleted }: Props) {
   const { setOnboarded } = useAuthStore();
-  const { addPerson, loadTree } = useFamilyTreeStore();
+  const { addPerson, addRelationship, loadTree } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -91,6 +103,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
     setBusy(true);
     setError(null);
     try {
+      // 1. Créer la fiche du user
       const created = await authApi.onboard({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim() || undefined,
@@ -98,10 +111,29 @@ export function OnboardingDialog({ onCompleted }: Props) {
         gender: form.gender,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
-      // addPerson met la fiche dans le store immédiatement — pas besoin de
-      // recharger tout l'arbre (l'endpoint /tree n'inclut pas les nœuds isolés).
       addPerson(created);
       setOnboarded(created.id, created.firstName);
+
+      // 2. Créer les fiches des parents et les relier
+      for (const { firstName, lastName } of parseNames(form.parentNames)) {
+        try {
+          const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
+          addPerson(parent);
+          const rel = await relationshipsApi.create({ personAId: created.id, personBId: parent.id, type: "parent" });
+          addRelationship(rel);
+        } catch { /* silencieux : l'essentiel est la fiche du user */ }
+      }
+
+      // 3. Créer les fiches des frères/sœurs et les relier
+      for (const { firstName, lastName } of parseNames(form.siblingNames)) {
+        try {
+          const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
+          addPerson(sibling);
+          const rel = await relationshipsApi.create({ personAId: created.id, personBId: sibling.id, type: "sibling" });
+          addRelationship(rel);
+        } catch { /* silencieux */ }
+      }
+
       onCompleted?.(created.id);
     } catch {
       setError("Impossible de creer votre fiche. Reessayez.");
@@ -114,6 +146,8 @@ export function OnboardingDialog({ onCompleted }: Props) {
     "w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring";
 
   const stepIndex = STEPS.indexOf(step);
+  const parentCount = splitList(form.parentNames).length;
+  const siblingCount = splitList(form.siblingNames).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4">
@@ -146,9 +180,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
         <div className="overflow-hidden">
           <div
             key={step}
-            className={`animate-slide-${
-              direction === "forward" ? "in" : "in-reverse"
-            } px-6 py-5 space-y-4`}
+            className={`animate-slide-${direction === "forward" ? "in" : "in-reverse"} px-6 py-5 space-y-4`}
           >
             {/* ── Step 1 : Identity ─────────────────────────────── */}
             {step === "identity" && (
@@ -214,7 +246,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
             {step === "origins" && (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Ces details affinement la recherche. Vous pouvez laisser vide si vous ne savez pas.
+                  Ces details affinent la recherche et permettront de creer les fiches de vos proches.
                 </p>
 
                 <div className="space-y-3">
@@ -225,7 +257,8 @@ export function OnboardingDialog({ onCompleted }: Props) {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Nom des parents <span className="font-normal text-muted-foreground/60">(separes par des virgules)</span>
+                      Noms de vos parents{" "}
+                      <span className="font-normal text-muted-foreground/60">(separes par des virgules)</span>
                     </label>
                     <input
                       value={form.parentNames}
@@ -233,11 +266,17 @@ export function OnboardingDialog({ onCompleted }: Props) {
                       placeholder="Mamadou Diallo, Fatou Sow"
                       className={inputCls}
                     />
+                    {parentCount > 0 && (
+                      <p className="text-[11px] text-primary">
+                        {parentCount} fiche{parentCount > 1 ? "s" : ""} parent{parentCount > 1 ? "s" : ""} sera{parentCount > 1 ? "ont" : ""} creee{parentCount > 1 ? "s" : ""} automatiquement
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Nom des freres et soeurs <span className="font-normal text-muted-foreground/60">(separes par des virgules)</span>
+                      Noms de vos freres et soeurs{" "}
+                      <span className="font-normal text-muted-foreground/60">(separes par des virgules)</span>
                     </label>
                     <input
                       value={form.siblingNames}
@@ -245,6 +284,11 @@ export function OnboardingDialog({ onCompleted }: Props) {
                       placeholder="Ibrahima, Awa, Moussa"
                       className={inputCls}
                     />
+                    {siblingCount > 0 && (
+                      <p className="text-[11px] text-primary">
+                        {siblingCount} fiche{siblingCount > 1 ? "s" : ""} frere/soeur{siblingCount > 1 ? "s" : ""} sera{siblingCount > 1 ? "ont" : ""} creee{siblingCount > 1 ? "s" : ""} automatiquement
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -279,7 +323,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     <p className="text-sm font-medium text-foreground">
                       {results.length} profil{results.length > 1 ? "s" : ""} trouve{results.length > 1 ? "s" : ""} — vous reconnaissez-vous ?
                     </p>
-                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {results.map((r) => (
                         <div key={r.person.id} className="flex items-center justify-between rounded-xl border border-border bg-background p-3 gap-3">
                           <div className="min-w-0">
@@ -308,6 +352,12 @@ export function OnboardingDialog({ onCompleted }: Props) {
                   </p>
                 )}
 
+                {(parentCount > 0 || siblingCount > 0) && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-primary">
+                    En creant votre fiche, {parentCount + siblingCount} fiche{parentCount + siblingCount > 1 ? "s" : ""} de proches sera{parentCount + siblingCount > 1 ? "ont" : ""} aussi creee{parentCount + siblingCount > 1 ? "s" : ""} et reliee{parentCount + siblingCount > 1 ? "s" : ""} — vous pourrez les enrichir ensuite.
+                  </div>
+                )}
+
                 {error && (
                   <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
                 )}
@@ -319,7 +369,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary bg-primary/5 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                   >
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
-                    Aucun, creer ma fiche
+                    {results.length > 0 ? "Aucun, creer ma fiche" : "Creer ma fiche"}
                   </button>
                   <button
                     onClick={() => goTo("origins", "back")}

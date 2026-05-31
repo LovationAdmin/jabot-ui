@@ -10,7 +10,7 @@ import { AccountMenu } from "@/components/tree/AccountMenu";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { Person } from "@/lib/types";
-import { LogIn, TreePine, Plus } from "lucide-react";
+import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -33,6 +33,8 @@ function JabotCanvas() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
@@ -146,18 +148,90 @@ function JabotCanvas() {
               <AccountMenu onEditMyCard={editMyCard} />
             </>
           ) : (
-            <button
-              onClick={() => navigate({ to: "/auth" })}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              <LogIn className="size-3.5" />
-              Presenter ma famille
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSearchOpen((o) => !o)}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Search className="size-3.5" />
+                <span className="hidden sm:block">Rechercher</span>
+              </button>
+              <button
+                onClick={() => navigate({ to: "/auth" })}
+                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <LogIn className="size-3.5" />
+                <span className="hidden sm:block">Rejoindre</span>
+              </button>
+            </div>
           )}
         </div>
       </header>
 
       <main className="relative flex flex-1 overflow-hidden">
+        {/* Banner visiteur */}
+        {!isAuthenticated && tree.persons.length > 0 && !searchOpen && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3">
+            <div className="pointer-events-auto glass flex items-center gap-3 rounded-full border border-border px-4 py-2 shadow-float">
+              <span className="text-sm text-muted-foreground">Vous parcourez l'arbre en tant que visiteur —</span>
+              <button
+                onClick={() => navigate({ to: "/auth" })}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Rejoindre pour contribuer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Overlay recherche */}
+        {searchOpen && (
+          <div className="absolute inset-x-0 top-0 z-20 flex justify-center pt-3 px-4">
+            <div className="glass w-full max-w-md rounded-2xl border border-border shadow-float">
+              <div className="flex items-center gap-2 px-4 py-3">
+                <Search className="size-4 shrink-0 text-muted-foreground" />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher un proche par nom…"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                />
+                <button onClick={() => { setSearchOpen(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="size-4" />
+                </button>
+              </div>
+              {searchQuery.trim().length > 0 && (
+                <div className="max-h-64 overflow-y-auto border-t border-border px-2 pb-2">
+                  {tree.persons
+                    .filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase().trim()))
+                    .slice(0, 8)
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => { centerOnPerson(p.id); setSearchOpen(false); setSearchQuery(""); }}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted"
+                      >
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {p.firstName?.[0]?.toUpperCase() ?? "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{p.firstName} {p.lastName}</p>
+                          {p.cityOfOrigin && <p className="text-xs text-muted-foreground">{p.cityOfOrigin}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  {tree.persons.filter((p) =>
+                    `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase().trim())
+                  ).length === 0 && (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">Aucun résultat pour « {searchQuery} »</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Canvas */}
         <div
           ref={canvasRef}
