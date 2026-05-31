@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2 } from "lucide-react";
 import { relationshipsApi, personsApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
 
@@ -126,12 +126,13 @@ export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
   isAuthenticated, onEdit,
 }: EditPanelProps) {
-  const { deleteRelationship, addRelationship, getPersonById } = useFamilyTreeStore();
+  const { deleteRelationship, addRelationship, getPersonById, deletePerson } = useFamilyTreeStore();
   const [activeGroup, setActiveGroup] = useState("parent");
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [linkMode, setLinkMode] = useState<{ groupKey: string; relType: string } | null>(null);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!person) return null;
 
@@ -150,6 +151,21 @@ export function EditPanel({
       deleteRelationship(relId);
     } finally {
       setUnlinking(null);
+    }
+  }
+
+  async function handleDeletePerson() {
+    if (!person) return;
+    if (!confirm(`Supprimer définitivement la fiche de ${fullName} ? Cette action est irréversible.`)) return;
+    setDeleting(true);
+    try {
+      await personsApi.delete(person.id);
+      deletePerson(person.id);
+      onClose();
+    } catch {
+      alert("Échec de la suppression. Réessayez.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -420,12 +436,20 @@ export function EditPanel({
 
       {/* Actions */}
       {isAuthenticated && (
-        <div className="border-t border-border/60 p-4">
+        <div className="flex gap-2 border-t border-border/60 p-4">
           <button
             onClick={() => onEdit?.(person)}
-            className="brand-gradient flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="brand-gradient flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
           >
             <Pencil className="size-4" /> Modifier
+          </button>
+          <button
+            onClick={handleDeletePerson}
+            disabled={deleting}
+            title="Supprimer cette fiche"
+            className="grid size-11 shrink-0 place-items-center rounded-xl border border-destructive/30 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
           </button>
         </div>
       )}
