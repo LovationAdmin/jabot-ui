@@ -9,6 +9,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as AccountActivityRouteImport } from './routes/account/activity'
+import { Route as AccountDuplicatesRouteImport } from './routes/account/duplicates'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,17 +35,25 @@ const AccountActivityRoute = AccountActivityRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 
+const AccountDuplicatesRoute = AccountDuplicatesRouteImport.update({
+  id: '/account/duplicates',
+  path: '/account/duplicates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthIndexRoute
   '/account': typeof AccountIndexRoute
   '/account/activity': typeof AccountActivityRoute
+  '/account/duplicates': typeof AccountDuplicatesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthIndexRoute
   '/account': typeof AccountIndexRoute
   '/account/activity': typeof AccountActivityRoute
+  '/account/duplicates': typeof AccountDuplicatesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -52,13 +61,14 @@ export interface FileRoutesById {
   '/auth/': typeof AuthIndexRoute
   '/account/': typeof AccountIndexRoute
   '/account/activity': typeof AccountActivityRoute
+  '/account/duplicates': typeof AccountDuplicatesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/account' | '/account/activity'
+  fullPaths: '/' | '/auth' | '/account' | '/account/activity' | '/account/duplicates'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/account' | '/account/activity'
-  id: '__root__' | '/' | '/auth/' | '/account/' | '/account/activity'
+  to: '/' | '/auth' | '/account' | '/account/activity' | '/account/duplicates'
+  id: '__root__' | '/' | '/auth/' | '/account/' | '/account/activity' | '/account/duplicates'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -66,6 +76,7 @@ export interface RootRouteChildren {
   AuthIndexRoute: typeof AuthIndexRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AccountActivityRoute: typeof AccountActivityRoute
+  AccountDuplicatesRoute: typeof AccountDuplicatesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -98,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/duplicates': {
+      id: '/account/duplicates'
+      path: '/account/duplicates'
+      fullPath: '/account/duplicates'
+      preLoaderRoute: typeof AccountDuplicatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthIndexRoute: AuthIndexRoute,
   AccountIndexRoute: AccountIndexRoute,
   AccountActivityRoute: AccountActivityRoute,
+  AccountDuplicatesRoute: AccountDuplicatesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

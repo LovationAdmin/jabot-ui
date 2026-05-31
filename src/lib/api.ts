@@ -316,4 +316,50 @@ export const mediaApi = {
   },
 };
 
+// ─── Duplicates ───────────────────────────────────────────────────
+
+export interface DuplicatePerson {
+  id: string;
+  first_name: string;
+  last_name?: string | null;
+  birth_date?: string | null;
+  gender?: string | null;
+}
+
+export interface DuplicatePair {
+  person_a: DuplicatePerson;
+  person_b: DuplicatePerson;
+  score: number;
+  confidence: "high" | "medium";
+}
+
+export const duplicatesApi = {
+  detect: async (): Promise<DuplicatePair[]> => {
+    const { data } = await apiClient.get<{ duplicates: DuplicatePair[] }>("/tree/duplicates");
+    return data.duplicates ?? [];
+  },
+
+  merge: async (sourceId: string, targetId: string): Promise<void> => {
+    await apiClient.post("/tree/merge", { source_person_id: sourceId, target_person_id: targetId });
+  },
+
+  autoMerge: async (): Promise<{ count: number }> => {
+    const { data } = await apiClient.post<{ count: number }>("/tree/auto-merge-duplicates");
+    return data;
+  },
+};
+
+// ─── Admin ────────────────────────────────────────────────────────
+
+export const adminApi = {
+  resetDb: async (secret: string): Promise<{ message: string }> => {
+    const { data } = await apiClient.post<{ message: string }>(
+      "/admin/reset-db",
+      {},
+      { headers: { "X-Reset-Secret": secret } },
+    );
+    return data;
+  },
+};
+
 export default apiClient;

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { Person, Relationship, AuthState, FamilyTree } from "./types";
-import { treeApi } from "./api";
+import { treeApi, duplicatesApi } from "./api";
 
 // ─── Auth Store ────────────────────────────────────────────────────
 
@@ -104,6 +104,13 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
       try {
         const result = await treeApi.getTree();
         set({ tree: result, error: null, isLoading: false, isWakingServer: false });
+        // Auto-merge high-confidence duplicates (authenticated users only, fire & forget).
+        const token = typeof window !== "undefined" ? localStorage.getItem("jabot_token") : null;
+        if (token) {
+          duplicatesApi.autoMerge().then(({ count }) => {
+            if (count > 0) treeApi.getTree().then((refreshed) => set({ tree: refreshed })).catch(() => {});
+          }).catch(() => {});
+        }
         return;
       } catch {
         // On continue d'essayer tant qu'il reste des tentatives.
