@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Phone, IdCard, LogOut, ShieldCheck, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Phone, IdCard, LogOut, ShieldCheck, Trash2, AlertTriangle, History, ChevronRight } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 import { authApi } from "@/lib/api";
 
@@ -65,7 +65,23 @@ function AccountPage() {
             />
           </div>
 
-          <div className="mt-8 border-t border-border pt-6">
+          <div className="mt-6">
+            <Link
+              to="/account/activity"
+              className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:bg-muted"
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                <History className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">Activite de l'arbre</p>
+                <p className="text-xs text-muted-foreground">Qui a cree, modifie ou supprime des fiches</p>
+              </div>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </Link>
+          </div>
+
+          <div className="mt-6 border-t border-border pt-6">
             <button
               onClick={() => { logout(); navigate({ to: "/" }); }}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

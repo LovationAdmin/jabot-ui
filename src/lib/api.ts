@@ -257,6 +257,48 @@ export const mergeApi = {
   },
 };
 
+// ─── Audit / Journal d'activité ──────────────────────────────────
+
+export type AuditAction =
+  | "create_person" | "update_person" | "delete_person"
+  | "create_relationship" | "delete_relationship" | "merge_persons";
+
+export interface AuditEntry {
+  id: number;
+  action: AuditAction | string;
+  entityType: "person" | "relationship" | string;
+  entityId: string;
+  actorName: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+interface AuditEntryResponse {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  actor_name?: string | null;
+  details?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export const auditApi = {
+  // Journal des créations / modifications / suppressions concernant l'arbre du user.
+  myTree: async (): Promise<AuditEntry[]> => {
+    const { data } = await apiClient.get<{ entries: AuditEntryResponse[] }>("/audit/my-tree");
+    return (data.entries ?? []).map((e) => ({
+      id: e.id,
+      action: e.action,
+      entityType: e.entity_type,
+      entityId: e.entity_id,
+      actorName: e.actor_name ?? null,
+      details: e.details ?? null,
+      createdAt: e.created_at,
+    }));
+  },
+};
+
 // ─── Media ───────────────────────────────────────────────────────
 
 export const mediaApi = {

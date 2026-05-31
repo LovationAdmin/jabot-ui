@@ -8,6 +8,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
+import { Route as AccountActivityRouteImport } from './routes/account/activity'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -27,34 +28,44 @@ const AccountIndexRoute = AccountIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 
+const AccountActivityRoute = AccountActivityRouteImport.update({
+  id: '/account/activity',
+  path: '/account/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthIndexRoute
   '/account': typeof AccountIndexRoute
+  '/account/activity': typeof AccountActivityRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthIndexRoute
   '/account': typeof AccountIndexRoute
+  '/account/activity': typeof AccountActivityRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth/': typeof AuthIndexRoute
   '/account/': typeof AccountIndexRoute
+  '/account/activity': typeof AccountActivityRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/account'
+  fullPaths: '/' | '/auth' | '/account' | '/account/activity'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/account'
-  id: '__root__' | '/' | '/auth/' | '/account/'
+  to: '/' | '/auth' | '/account' | '/account/activity'
+  id: '__root__' | '/' | '/auth/' | '/account/' | '/account/activity'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthIndexRoute: typeof AuthIndexRoute
   AccountIndexRoute: typeof AccountIndexRoute
+  AccountActivityRoute: typeof AccountActivityRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -80,6 +91,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/activity': {
+      id: '/account/activity'
+      path: '/account/activity'
+      fullPath: '/account/activity'
+      preLoaderRoute: typeof AccountActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -87,8 +105,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthIndexRoute: AuthIndexRoute,
   AccountIndexRoute: AccountIndexRoute,
+  AccountActivityRoute: AccountActivityRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
