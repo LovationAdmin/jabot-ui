@@ -342,6 +342,11 @@ export const duplicatesApi = {
   merge: async (sourceId: string, targetId: string): Promise<void> => {
     await apiClient.post("/tree/merge", { source_person_id: sourceId, target_person_id: targetId });
   },
+
+  autoMerge: async (): Promise<{ count: number }> => {
+    const { data } = await apiClient.post<{ count: number }>("/tree/auto-merge-duplicates");
+    return data;
+  },
 };
 
 // ─── Admin ────────────────────────────────────────────────────────

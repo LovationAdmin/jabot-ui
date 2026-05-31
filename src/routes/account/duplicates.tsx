@@ -92,8 +92,8 @@ function DuplicatesPage() {
         {!loading && visiblePairs.length === 0 && !error && (
           <div className="flex flex-col items-center gap-3 py-16 text-center text-muted-foreground">
             <CheckCircle className="w-10 h-10 text-green-500" />
-            <p className="font-medium text-foreground">Aucun doublon détecté</p>
-            <p className="text-sm">Toutes les fiches semblent uniques.</p>
+            <p className="font-medium text-foreground">Aucun doublon à examiner</p>
+            <p className="text-sm">Les doublons évidents sont fusionnés automatiquement au chargement.</p>
           </div>
         )}
 
