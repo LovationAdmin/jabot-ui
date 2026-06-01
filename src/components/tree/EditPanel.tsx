@@ -264,7 +264,7 @@ export function EditPanel({
   };
 
   return (
-    <aside className="flex max-h-[75vh] sm:max-h-none h-full w-full sm:w-80 shrink-0 flex-col border-l border-border/60 bg-card">
+    <aside className="flex max-h-[52vh] sm:max-h-none h-full w-full sm:w-80 shrink-0 flex-col border-l border-border/60 bg-card">
       {/* Indicateur de glissement (mobile uniquement) */}
       <div className="flex justify-center pt-2 pb-0 sm:hidden">
         <div className="h-1 w-10 rounded-full bg-border" />
