@@ -10,9 +10,12 @@ import { AccountMenu } from "@/components/tree/AccountMenu";
 import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { ExportDialog } from "@/components/tree/ExportDialog";
 import { InviteManager } from "@/components/tree/InviteManager";
+import { TreeTabs } from "@/components/tree/TreeTabs";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { useTreeSync } from "@/lib/useTreeSync";
+import { computeComponents } from "@/lib/treeComponents";
+import { useTabNames } from "@/lib/useTabNames";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
@@ -42,6 +45,8 @@ function JabotCanvas() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
   const [lineage, setLineage] = useState<{ rootId: string; dir: "ancestors" | "descendants" } | null>(null);
+  // Onglet de composante active (null = pas encore calculé, utilise la 1re).
+  const [activeComponentId, setActiveComponentId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -228,7 +233,7 @@ function JabotCanvas() {
 
   // Zoom-to-fit : ajuste zoom + pan pour que tout l'arbre soit visible.
   const fitAll = () => {
-    const ps = tree.persons;
+    const ps = visiblePersons.length > 0 ? visiblePersons : tree.persons;
     if (ps.length === 0) { centerSelf(); return; }
     const PADDING = 60;
     const CARD_W = 208;
@@ -247,10 +252,44 @@ function JabotCanvas() {
     setPan({ x: (viewport.w - treeW * z) / 2 - minX * z, y: (viewport.h - treeH * z) / 2 - minY * z });
   };
 
-  const familyColors = computeFamilyColors(tree.persons, tree.relationships);
+  // ── Composantes connexes (multi-arbres) ──────────────────────────
+  const treeComponents = computeComponents(tree.persons, tree.relationships);
+  const { getTabName, rename: renameTab } = useTabNames();
+
+  // Active la première composante par défaut, ou si la composante active
+  // disparaît (fusion de deux arbres).
+  const effectiveComponentId =
+    activeComponentId && treeComponents.some((c) => c.id === activeComponentId)
+      ? activeComponentId
+      : treeComponents[0]?.id ?? null;
+
+  const activeComponent = treeComponents.find((c) => c.id === effectiveComponentId) ?? null;
+
+  // Filtre les personnes et relations de la composante active.
+  const visiblePersons = activeComponent
+    ? tree.persons.filter((p) => activeComponent.personIds.has(p.id))
+    : tree.persons;
+  const visibleRelationships = activeComponent
+    ? tree.relationships.filter(
+        (r) => activeComponent.personIds.has(r.personAId) && activeComponent.personIds.has(r.personBId),
+      )
+    : tree.relationships;
+
+  // Quand on change d'onglet : reset le pan/zoom et la sélection.
+  function switchComponent(id: string) {
+    if (id === effectiveComponentId) return;
+    setActiveComponentId(id);
+    setSelectedId(null);
+    setLineage(null);
+    setSurnameFilter(new Set());
+    setZoom(isMobile ? 0.45 : 1);
+    setPan({ x: 80, y: 60 });
+  }
+
+  const familyColors = computeFamilyColors(visiblePersons, visibleRelationships);
 
   // Couleurs par nom de famille (dégradé selon l'ordre d'apparition) + filtre.
-  const surnameStats = computeSurnameStats(tree.persons);
+  const surnameStats = computeSurnameStats(visiblePersons);
   const surnameColorMap = buildSurnameColorMap(surnameStats);
   const surnameColorOf = (p: Person) => surnameColorMap.get(normalizeSurname(p.lastName));
   // Une fiche est estompée si un filtre est actif et que son nom n'en fait pas partie.
@@ -271,8 +310,8 @@ function JabotCanvas() {
     ? new Set<string>([
         lineage.rootId,
         ...(lineage.dir === "ancestors"
-          ? ancestorsOf(lineage.rootId, tree.relationships)
-          : descendantsOf(lineage.rootId, tree.relationships)),
+          ? ancestorsOf(lineage.rootId, visibleRelationships)
+          : descendantsOf(lineage.rootId, visibleRelationships)),
       ])
     : null;
 
@@ -286,7 +325,7 @@ function JabotCanvas() {
   const toggleLineage = (rootId: string, dir: "ancestors" | "descendants") =>
     setLineage((cur) => (cur && cur.rootId === rootId && cur.dir === dir ? null : { rootId, dir }));
 
-  const selected: Person | null = tree.persons.find((p) => p.id === selectedId) ?? null;
+  const selected: Person | null = visiblePersons.find((p) => p.id === selectedId) ?? null;
 
   const editMyCard = () => {
     const me = personId ? getPersonById(personId) : undefined;
@@ -353,6 +392,15 @@ function JabotCanvas() {
         </div>
       </header>
 
+      {/* Onglets multi-arbres — visible uniquement si 2+ composantes connexes */}
+      <TreeTabs
+        components={treeComponents}
+        activeId={effectiveComponentId ?? ""}
+        getTabName={getTabName}
+        onSelect={switchComponent}
+        onRename={renameTab}
+      />
+
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banner visiteur */}
         {!isAuthenticated && tree.persons.length > 0 && !searchOpen && (
@@ -394,7 +442,7 @@ function JabotCanvas() {
               </div>
               {searchQuery.trim().length > 0 && (
                 <div className="max-h-64 overflow-y-auto border-t border-border px-2 pb-2">
-                  {tree.persons
+                  {visiblePersons
                     .filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase().trim()))
                     .slice(0, 8)
                     .map((p) => (
@@ -412,7 +460,7 @@ function JabotCanvas() {
                         </div>
                       </button>
                     ))}
-                  {tree.persons.filter((p) =>
+                  {visiblePersons.filter((p) =>
                     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase().trim())
                   ).length === 0 && (
                     <p className="px-3 py-3 text-sm text-muted-foreground">Aucun résultat pour « {searchQuery} »</p>
@@ -508,7 +556,7 @@ function JabotCanvas() {
           )}
 
           {/* World */}
-          {!isLoading && tree.persons.length > 0 && (
+          {!isLoading && visiblePersons.length > 0 && (
             <div
               ref={worldRef}
               style={{
@@ -519,8 +567,8 @@ function JabotCanvas() {
               }}
               className="absolute left-0 top-0"
             >
-              <Connectors persons={tree.persons} relationships={tree.relationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
-              {tree.persons.map((p) => (
+              <Connectors persons={visiblePersons} relationships={visibleRelationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
+              {visiblePersons.map((p) => (
                 <PersonCard
                   key={p.id}
                   person={p}
@@ -538,7 +586,7 @@ function JabotCanvas() {
             </div>
           )}
 
-          {tree.persons.length > 0 && (
+          {visiblePersons.length > 0 && (
             <SurnameLegend
               stats={surnameStats}
               activeFilter={surnameFilter}
@@ -549,9 +597,9 @@ function JabotCanvas() {
 
           <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
-          {tree.persons.length > 0 && (
+          {visiblePersons.length > 0 && (
             <MiniMap
-              persons={tree.persons}
+              persons={visiblePersons}
               selectedId={selectedId}
               viewport={{ x: pan.x, y: pan.y, w: viewport.w, h: viewport.h, zoom }}
               worldBounds={WORLD}
@@ -592,7 +640,7 @@ function JabotCanvas() {
       {exportOpen && (
         <ExportDialog
           worldRef={worldRef}
-          persons={tree.persons}
+          persons={visiblePersons}
           surnameStats={surnameStats}
           surnameFilter={surnameFilter}
           onClose={() => setExportOpen(false)}
