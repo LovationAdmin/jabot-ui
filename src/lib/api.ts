@@ -113,6 +113,8 @@ export interface MeState {
   phone: string;
   personId: string | null;
   onboarded: boolean;
+  // Token réémis (session glissante) — à restocker pour repousser l'expiration.
+  accessToken?: string;
 }
 
 export const authApi = {
@@ -143,8 +145,8 @@ export const authApi = {
   },
 
   me: async (): Promise<MeState> => {
-    const { data } = await apiClient.get<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean }>("/auth/me");
-    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false };
+    const { data } = await apiClient.get<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean; access_token?: string }>("/auth/me");
+    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false, accessToken: data.access_token };
   },
 
   // « C'est moi » : rattache le compte a une fiche existante du canvas.

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Loader2, X } from "lucide-react";
+import { Search, Loader2, X, Users } from "lucide-react";
 import { personsApi } from "@/lib/api";
-import { Person } from "@/lib/types";
+import { Person, SearchResult } from "@/lib/types";
+
+const FAMILY_REASON_PREFIX = "Correspondance familiale";
 
 interface PersonSearchSelectProps {
   /** Identifiants à exclure des résultats (déjà liés, soi-même…). */
@@ -43,7 +45,7 @@ export function PersonSearchSelect({
   context,
 }: PersonSearchSelectProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Person[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -69,9 +71,7 @@ export function PersonSearchSelect({
         });
         // Ignore les réponses obsolètes (course entre requêtes).
         if (reqId !== reqIdRef.current) return;
-        const filtered = matches
-          .map((m) => m.person)
-          .filter((p) => !excludeIds?.has(p.id));
+        const filtered = matches.filter((m) => !excludeIds?.has(m.person.id));
         setResults(filtered.slice(0, 8));
         setActiveIdx(0);
       } catch {
@@ -159,7 +159,7 @@ export function PersonSearchSelect({
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, results.length - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter" && results[activeIdx]) { e.preventDefault(); choose(results[activeIdx]); }
+            else if (e.key === "Enter" && results[activeIdx]) { e.preventDefault(); choose(results[activeIdx].person); }
             else if (e.key === "Escape") setOpen(false);
           }}
           placeholder={placeholder}
@@ -173,29 +173,41 @@ export function PersonSearchSelect({
           {results.length === 0 && !loading ? (
             <p className="px-3 py-3 text-center text-xs text-muted-foreground">Aucun résultat</p>
           ) : (
-            results.map((p, i) => (
-              <button
-                key={p.id}
-                type="button"
-                onMouseEnter={() => setActiveIdx(i)}
-                onClick={() => choose(p)}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
-                  i === activeIdx ? "bg-muted" : "hover:bg-muted/60"
-                }`}
-              >
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                  {p.firstName?.[0]?.toUpperCase() ?? "?"}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {[p.firstName, p.lastName].filter(Boolean).join(" ")}
-                  </p>
-                  {subtitle(p) && (
-                    <p className="truncate text-[10px] text-muted-foreground">{subtitle(p)}</p>
+            results.map((r, i) => {
+              const p = r.person;
+              const familyMatch = r.matchReasons.some((reason) => reason.startsWith(FAMILY_REASON_PREFIX));
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onMouseEnter={() => setActiveIdx(i)}
+                  onClick={() => choose(p)}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                    i === activeIdx ? "bg-muted" : "hover:bg-muted/60"
+                  }`}
+                >
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {p.firstName?.[0]?.toUpperCase() ?? "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {[p.firstName, p.lastName].filter(Boolean).join(" ")}
+                    </p>
+                    {subtitle(p) && (
+                      <p className="truncate text-[10px] text-muted-foreground">{subtitle(p)}</p>
+                    )}
+                  </div>
+                  {familyMatch && (
+                    <span
+                      title="Proche de la même famille"
+                      className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600"
+                    >
+                      <Users className="size-2.5" /> Famille
+                    </span>
                   )}
-                </div>
-              </button>
-            ))
+                </button>
+              );
+            })
           )}
         </div>
       )}
