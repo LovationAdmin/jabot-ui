@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, GitBranch, Upload, Mic, MicOff, Square } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, Upload, Mic, Square, UserPlus } from "lucide-react";
 import { relationshipsApi, personsApi, mediaApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
+import { PersonSearchSelect } from "./PersonSearchSelect";
 
 // ─── Libellés de relations ─────────────────────────────────────────
 
@@ -164,21 +165,24 @@ interface EditPanelProps {
   onSelectPerson: (id: string) => void;
   isAuthenticated?: boolean;
   onEdit?: (person: Person) => void;
-  ancestorsActive?: boolean;
-  onToggleAncestors?: () => void;
 }
 
 export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
-  isAuthenticated, onEdit, ancestorsActive, onToggleAncestors,
+  isAuthenticated, onEdit,
 }: EditPanelProps) {
-  const { deleteRelationship, addRelationship, getPersonById, deletePerson, updatePerson } = useFamilyTreeStore();
+  const { deleteRelationship, addRelationship, addPerson, loadTree, getPersonById, deletePerson, updatePerson } = useFamilyTreeStore();
   const [activeGroup, setActiveGroup] = useState("parent");
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [linkMode, setLinkMode] = useState<{ groupKey: string; relType: string } | null>(null);
-  const [linkTarget, setLinkTarget] = useState("");
+  const [linkTarget, setLinkTarget] = useState<Person | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Sous-mode du formulaire de liaison : choisir une fiche existante ou en créer une.
+  const [createNew, setCreateNew] = useState(false);
+  const [newFirst, setNewFirst] = useState("");
+  const [newLast, setNewLast] = useState("");
+  const [newBirth, setNewBirth] = useState("");
 
   // Media state
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -229,30 +233,61 @@ export function EditPanel({
     }
   }
 
+  function resetLinkForm() {
+    setLinkMode(null);
+    setLinkTarget(null);
+    setCreateNew(false);
+    setNewFirst("");
+    setNewLast("");
+    setNewBirth("");
+  }
+
+  // Crée l'arête entre la personne courante et `targetId` selon le rôle choisi.
+  // Convention : type "parent" = personAId IS PARENT OF personBId.
+  // Règle universelle pour les types directionnels : personAId = cible
+  // (porteur du rôle), personBId = personne courante (point de vue). Les types
+  // symétriques (spouse, sibling…) : l'ordre n'a pas d'importance.
+  async function createRelationship(targetId: string, relType: string) {
+    const DIRECTIONAL = new Set([
+      "parent", "child", "step_parent", "step_child",
+      "grandparent", "grandchild", "uncle_aunt", "nephew_niece",
+    ]);
+    const isDirectional = DIRECTIONAL.has(relType);
+    const rel = await relationshipsApi.create({
+      personAId: isDirectional ? targetId : person!.id,
+      personBId: isDirectional ? person!.id : targetId,
+      type: relType as Relationship["type"],
+    });
+    addRelationship(rel);
+  }
+
   async function handleLink() {
     if (!linkMode || !linkTarget || !person) return;
     setLinkBusy(true);
     try {
-      // Convention : type "parent" = personAId IS PARENT OF personBId.
-      // Pour les types directionnels (parent, child, step_parent, step_child,
-      // grandparent, grandchild, uncle_aunt, nephew_niece), le rôle décrit
-      // ce que la CIBLE est pour la personne courante.
-      // Règle universelle : personAId = cible (porteur du rôle),
-      //                     personBId = personne courante (le point de vue).
-      // Pour les types symétriques (spouse, sibling…) l'ordre n'a pas d'importance.
-      const DIRECTIONAL = new Set([
-        "parent", "child", "step_parent", "step_child",
-        "grandparent", "grandchild", "uncle_aunt", "nephew_niece",
-      ]);
-      const isDirectional = DIRECTIONAL.has(linkMode.relType);
-      const rel = await relationshipsApi.create({
-        personAId: isDirectional ? linkTarget : person.id,
-        personBId: isDirectional ? person.id : linkTarget,
-        type: linkMode.relType as Relationship["type"],
+      await createRelationship(linkTarget.id, linkMode.relType);
+      resetLinkForm();
+      loadTree();
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
+  async function handleCreateAndLink() {
+    if (!linkMode || !person || !newFirst.trim()) return;
+    setLinkBusy(true);
+    try {
+      const created = await personsApi.create({
+        firstName: newFirst.trim(),
+        lastName: newLast.trim() || undefined,
+        birthDate: newBirth.trim() || undefined,
       });
-      addRelationship(rel);
-      setLinkMode(null);
-      setLinkTarget("");
+      addPerson(created);
+      await createRelationship(created.id, linkMode.relType);
+      resetLinkForm();
+      loadTree();
+    } catch {
+      alert("Échec de la création de la fiche. Réessayez.");
     } finally {
       setLinkBusy(false);
     }
@@ -340,11 +375,10 @@ export function EditPanel({
     setRecording(false);
   }
 
-  // Personnes non encore liées (pour le sélecteur "lier")
+  // Personnes déjà liées + soi-même : à exclure du typeahead de liaison.
   const linkedIds = new Set(
     Object.values(groups).flat().map((e) => e.person.id).concat([person.id]),
   );
-  const candidates = allPersons.filter((p) => !linkedIds.has(p.id));
 
   // Groupes disponibles pour lier directement (pas inférés)
   const directGroups = REL_GROUPS.filter((g) => !g.inferred);
@@ -610,13 +644,13 @@ export function EditPanel({
               </div>
             ))}
 
-            {/* Bouton lier une personne (auth + onglet direct) */}
+            {/* Lier / créer une personne (auth + onglet direct) */}
             {isAuthenticated && directGroups.some((g) => g.key === currentGroup) && (
               <>
                 {linkMode?.groupKey === currentGroup ? (
                   <div className="mt-2 space-y-2 rounded-xl border border-border bg-background/50 p-3">
+                    {/* Type de relation */}
                     <select
-                      autoFocus
                       value={linkMode.relType}
                       onChange={(e) => setLinkMode({ groupKey: currentGroup, relType: e.target.value })}
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
@@ -625,42 +659,100 @@ export function EditPanel({
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
-                    <select
-                      value={linkTarget}
-                      onChange={(e) => setLinkTarget(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                    >
-                      <option value="">Choisir une personne…</option>
-                      {candidates.map((p) => (
-                        <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
+
+                    {/* Bascule existante / nouvelle */}
+                    <div className="flex gap-1 rounded-lg bg-muted p-0.5 text-xs">
                       <button
-                        onClick={() => { setLinkMode(null); setLinkTarget(""); }}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setCreateNew(false)}
+                        className={`flex-1 rounded-md py-1.5 font-medium transition-colors ${!createNew ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
                       >
-                        Annuler
+                        Fiche existante
                       </button>
                       <button
-                        onClick={handleLink}
-                        disabled={!linkTarget || linkBusy}
-                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary/10 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                        onClick={() => setCreateNew(true)}
+                        className={`flex-1 rounded-md py-1.5 font-medium transition-colors ${createNew ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
                       >
-                        <UserCheck className="size-3.5" /> Lier
+                        Nouvelle fiche
                       </button>
                     </div>
+
+                    {createNew ? (
+                      <div className="space-y-2">
+                        <input
+                          autoFocus
+                          value={newFirst}
+                          onChange={(e) => setNewFirst(e.target.value)}
+                          placeholder="Prénom *"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                        />
+                        <input
+                          value={newLast}
+                          onChange={(e) => setNewLast(e.target.value)}
+                          placeholder="Nom"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                        />
+                        <input
+                          value={newBirth}
+                          onChange={(e) => setNewBirth(e.target.value)}
+                          placeholder="Date de naissance (AAAA ou AAAA-MM-JJ)"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={resetLinkForm}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleCreateAndLink}
+                            disabled={!newFirst.trim() || linkBusy}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary/10 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                          >
+                            {linkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />}
+                            Créer &amp; lier
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <PersonSearchSelect
+                          autoFocus
+                          excludeIds={linkedIds}
+                          selected={linkTarget}
+                          onSelect={setLinkTarget}
+                          onClear={() => setLinkTarget(null)}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={resetLinkForm}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleLink}
+                            disabled={!linkTarget || linkBusy}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary/10 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                          >
+                            {linkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <UserCheck className="size-3.5" />}
+                            Lier
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : candidates.length > 0 && (
+                ) : (
                   <button
                     onClick={() => {
                       const defaultType = REL_GROUPS.find((g) => g.key === currentGroup)?.types[0] ?? currentGroup;
                       setLinkMode({ groupKey: currentGroup, relType: defaultType });
-                      setLinkTarget("");
+                      setLinkTarget(null);
+                      setCreateNew(false);
                     }}
                     className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
                   >
-                    <Plus className="size-3.5" /> Lier une personne
+                    <Plus className="size-3.5" /> Lier ou créer une personne
                   </button>
                 )}
               </>
@@ -668,23 +760,6 @@ export function EditPanel({
           </div>
         </div>
       </div>
-
-      {/* Bouton surbrillance des ascendants — visible pour tous */}
-      {onToggleAncestors && (
-        <div className="border-t border-border/60 px-4 py-3">
-          <button
-            onClick={onToggleAncestors}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
-              ancestorsActive
-                ? "border-amber-400 bg-amber-400/10 text-amber-600"
-                : "border-border text-muted-foreground hover:border-amber-400/50 hover:text-amber-600"
-            }`}
-          >
-            <GitBranch className="size-4" />
-            {ancestorsActive ? "Masquer les ascendants" : "Voir les ascendants"}
-          </button>
-        </div>
-      )}
 
       {/* Actions */}
       {isAuthenticated && (

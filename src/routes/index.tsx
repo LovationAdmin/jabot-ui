@@ -12,7 +12,7 @@ import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
-import { ancestorsOf } from "@/lib/lineage";
+import { ancestorsOf, descendantsOf } from "@/lib/lineage";
 import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -35,8 +35,8 @@ function JabotCanvas() {
   const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Surbrillance des ascendants : id de la personne dont on éclaire la lignée.
-  const [ancestorRootId, setAncestorRootId] = useState<string | null>(null);
+  // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
+  const [lineage, setLineage] = useState<{ rootId: string; dir: "ancestors" | "descendants" } | null>(null);
   const [form, setForm] = useState<FormState>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -214,15 +214,25 @@ function JabotCanvas() {
   const familyColors = computeFamilyColors(tree.persons, tree.relationships);
 
   // Ensemble des fiches à mettre en avant quand on éclaire une lignée :
-  // la personne racine + tous ses ascendants (parents, grands-parents…).
-  const highlightSet = ancestorRootId
-    ? new Set<string>([ancestorRootId, ...ancestorsOf(ancestorRootId, tree.relationships)])
+  // la personne racine + ses ascendants OU descendants selon la direction.
+  const highlightSet = lineage
+    ? new Set<string>([
+        lineage.rootId,
+        ...(lineage.dir === "ancestors"
+          ? ancestorsOf(lineage.rootId, tree.relationships)
+          : descendantsOf(lineage.rootId, tree.relationships)),
+      ])
     : null;
 
-  const highlightFor = (id: string): "ancestor" | "dim" | null => {
-    if (!highlightSet) return null;
-    return highlightSet.has(id) ? "ancestor" : "dim";
+  const highlightFor = (id: string): "ancestor" | "descendant" | "dim" | null => {
+    if (!highlightSet || !lineage) return null;
+    if (!highlightSet.has(id)) return "dim";
+    return lineage.dir === "ancestors" ? "ancestor" : "descendant";
   };
+
+  // Bascule la surbrillance d'une lignée depuis les flèches d'une carte.
+  const toggleLineage = (rootId: string, dir: "ancestors" | "descendants") =>
+    setLineage((cur) => (cur && cur.rootId === rootId && cur.dir === dir ? null : { rootId, dir }));
 
   const selected: Person | null = tree.persons.find((p) => p.id === selectedId) ?? null;
 
@@ -359,7 +369,7 @@ function JabotCanvas() {
           ref={canvasRef}
           onMouseDown={onMouseDown}
           onWheel={onWheel}
-          onClick={(e) => { if (!(e.target as HTMLElement).closest("[data-card]")) { setSelectedId(null); setAncestorRootId(null); } }}
+          onClick={(e) => { if (!(e.target as HTMLElement).closest("[data-card]")) { setSelectedId(null); setLineage(null); } }}
           className="canvas-grid relative flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
         >
           {/* Loading */}
@@ -451,7 +461,18 @@ function JabotCanvas() {
             >
               <Connectors persons={tree.persons} relationships={tree.relationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
               {tree.persons.map((p) => (
-                <PersonCard key={p.id} person={p} selected={p.id === selectedId} onSelect={setSelectedId} isAuthenticated={isAuthenticated} familyColor={familyColors.get(p.id)} highlight={highlightFor(p.id)} />
+                <PersonCard
+                  key={p.id}
+                  person={p}
+                  selected={p.id === selectedId}
+                  onSelect={setSelectedId}
+                  isAuthenticated={isAuthenticated}
+                  familyColor={familyColors.get(p.id)}
+                  highlight={highlightFor(p.id)}
+                  lineageDir={lineage?.rootId === p.id ? lineage.dir : null}
+                  onToggleAncestors={(id) => toggleLineage(id, "ancestors")}
+                  onToggleDescendants={(id) => toggleLineage(id, "descendants")}
+                />
               ))}
             </div>
           )}
@@ -487,14 +508,10 @@ function JabotCanvas() {
             person={selected}
             allPersons={tree.persons}
             relationships={tree.relationships}
-            onClose={() => { setSelectedId(null); setAncestorRootId(null); }}
-            onSelectPerson={(id) => { setSelectedId(id); setAncestorRootId(null); }}
+            onClose={() => { setSelectedId(null); setLineage(null); }}
+            onSelectPerson={(id) => { setSelectedId(id); setLineage(null); }}
             isAuthenticated={isAuthenticated}
             onEdit={(p) => setForm({ mode: "edit", person: p })}
-            ancestorsActive={ancestorRootId !== null && ancestorRootId === selectedId}
-            onToggleAncestors={() =>
-              setAncestorRootId((cur) => (cur === selectedId ? null : selectedId))
-            }
           />
         </div>
       </main>

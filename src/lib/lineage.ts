@@ -39,3 +39,39 @@ export function ancestorsOf(personId: string, relationships: Relationship[]): Se
   }
   return result;
 }
+
+function buildChildrenOf(relationships: Relationship[]): Map<string, Set<string>> {
+  const childrenOf = new Map<string, Set<string>>();
+  const add = (parentId: string, childId: string) => {
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, new Set());
+    childrenOf.get(parentId)!.add(childId);
+  };
+  for (const r of relationships) {
+    if (r.type === "parent" || r.type === "step_parent") {
+      add(r.personAId, r.personBId);
+    } else if (r.type === "child" || r.type === "step_child") {
+      add(r.personBId, r.personAId);
+    }
+  }
+  return childrenOf;
+}
+
+/**
+ * Tous les descendants d'une personne (enfants, petits-enfants, …) en
+ * descendant la chaîne parent→enfant. N'inclut PAS la personne elle-même.
+ * Robuste aux cycles éventuels.
+ */
+export function descendantsOf(personId: string, relationships: Relationship[]): Set<string> {
+  const childrenOf = buildChildrenOf(relationships);
+  const result = new Set<string>();
+  const stack = [...(childrenOf.get(personId) ?? [])];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (result.has(cur)) continue;
+    result.add(cur);
+    for (const c of childrenOf.get(cur) ?? []) {
+      if (!result.has(c)) stack.push(c);
+    }
+  }
+  return result;
+}
