@@ -27,10 +27,6 @@ function center(p: Person) {
   return { x: (p.position?.x ?? 0) + CARD_W / 2, y: (p.position?.y ?? 0) + CARD_H / 2 };
 }
 
-const DASHED_TYPES = new Set([
-  "grandparent", "grandchild", "step_parent", "step_child",
-  "uncle_aunt", "nephew_niece", "half_sibling", "step_sibling", "cousin", "homonym",
-]);
 
 export function Connectors({ persons, relationships, width = 4000, height = 3000, familyColors }: ConnectorsProps) {
   const map = new Map(persons.map((p) => [p.id, p]));
