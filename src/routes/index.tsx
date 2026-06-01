@@ -7,11 +7,13 @@ import { Toolbar } from "@/components/tree/Toolbar";
 import { MiniMap } from "@/components/tree/MiniMap";
 import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 import { AccountMenu } from "@/components/tree/AccountMenu";
+import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
+import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
 import { ancestorsOf, descendantsOf } from "@/lib/lineage";
 import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
 
@@ -40,6 +42,8 @@ function JabotCanvas() {
   const [form, setForm] = useState<FormState>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Filtre par nom de famille (noms normalisés). Vide = tout visible.
+  const [surnameFilter, setSurnameFilter] = useState<Set<string>>(new Set());
   // Zoom initial adapté au viewport : plus petit sur mobile pour voir l'ensemble.
   const [zoom, setZoom] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? 0.45 : 1,
@@ -233,6 +237,22 @@ function JabotCanvas() {
   };
 
   const familyColors = computeFamilyColors(tree.persons, tree.relationships);
+
+  // Couleurs par nom de famille (dégradé selon l'ordre d'apparition) + filtre.
+  const surnameStats = computeSurnameStats(tree.persons);
+  const surnameColorMap = buildSurnameColorMap(surnameStats);
+  const surnameColorOf = (p: Person) => surnameColorMap.get(normalizeSurname(p.lastName));
+  // Une fiche est estompée si un filtre est actif et que son nom n'en fait pas partie.
+  const dimmedBySurname = (p: Person) =>
+    surnameFilter.size > 0 && !surnameFilter.has(normalizeSurname(p.lastName));
+
+  const toggleSurname = (norm: string) =>
+    setSurnameFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(norm)) next.delete(norm);
+      else next.add(norm);
+      return next;
+    });
 
   // Ensemble des fiches à mettre en avant quand on éclaire une lignée :
   // la personne racine + ses ascendants OU descendants selon la direction.
@@ -496,13 +516,23 @@ function JabotCanvas() {
                   onSelect={setSelectedId}
                   isAuthenticated={isAuthenticated}
                   familyColor={familyColors.get(p.id)}
-                  highlight={highlightFor(p.id)}
+                  surnameColor={surnameColorOf(p)}
+                  highlight={dimmedBySurname(p) ? "dim" : highlightFor(p.id)}
                   lineageDir={lineage?.rootId === p.id ? lineage.dir : null}
                   onToggleAncestors={(id) => toggleLineage(id, "ancestors")}
                   onToggleDescendants={(id) => toggleLineage(id, "descendants")}
                 />
               ))}
             </div>
+          )}
+
+          {tree.persons.length > 0 && (
+            <SurnameLegend
+              stats={surnameStats}
+              activeFilter={surnameFilter}
+              onToggle={toggleSurname}
+              onClear={() => setSurnameFilter(new Set())}
+            />
           )}
 
           <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} />

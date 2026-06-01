@@ -1,5 +1,6 @@
 import { Person } from "@/lib/types";
 import { FamilyColor, alpha } from "@/lib/familyColors";
+import { SurnameColor } from "@/lib/surnameColors";
 import { cn } from "@/lib/utils";
 import { MapPin, Music, Lock, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -12,6 +13,8 @@ interface PersonCardProps {
   onSelect: (id: string) => void;
   isAuthenticated?: boolean;
   familyColor?: FamilyColor;
+  // Couleur du nom de famille → bandeau d'identification en haut de la carte.
+  surnameColor?: SurnameColor;
   // Surbrillance de lignée : "ancestor"/"descendant" = mis en avant, "dim" = estompé.
   highlight?: "ancestor" | "descendant" | "dim" | null;
   // Direction de lignée actuellement mise en surbrillance pour CETTE carte.
@@ -22,7 +25,7 @@ interface PersonCardProps {
 }
 
 export function PersonCard({
-  person, selected, onSelect, isAuthenticated = false, familyColor, highlight,
+  person, selected, onSelect, isAuthenticated = false, familyColor, surnameColor, highlight,
   lineageDir, onToggleAncestors, onToggleDescendants,
 }: PersonCardProps) {
   const isDeceased = !!person.deathDate;
@@ -61,6 +64,15 @@ export function PersonCard({
         highlight === "dim" && "opacity-30 grayscale",
       )}
     >
+      {/* Bandeau nom de famille : identification rapide de la lignée. */}
+      {surnameColor && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-2xl"
+          style={{ backgroundColor: surnameColor.band }}
+        />
+      )}
+
       {/* Photo */}
       <div
         className="relative size-14 shrink-0 overflow-hidden rounded-xl"
