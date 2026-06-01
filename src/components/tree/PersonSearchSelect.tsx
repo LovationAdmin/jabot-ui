@@ -14,6 +14,13 @@ interface PersonSearchSelectProps {
   onClear?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /**
+   * Contexte familial de la personne depuis laquelle on lie. Transmis à
+   * l'API de recherche : le backend booste les candidats dont les parents /
+   * la fratrie correspondent à ces noms → les bons homonymes (même famille)
+   * remontent en tête.
+   */
+  context?: { parentNames?: string[]; siblingNames?: string[] };
 }
 
 /**
@@ -33,6 +40,7 @@ export function PersonSearchSelect({
   onClear,
   placeholder = "Rechercher un nom…",
   autoFocus,
+  context,
 }: PersonSearchSelectProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Person[]>([]);
@@ -54,7 +62,11 @@ export function PersonSearchSelect({
       const reqId = ++reqIdRef.current;
       setLoading(true);
       try {
-        const matches = await personsApi.search({ name: trimmed });
+        const matches = await personsApi.search({
+          name: trimmed,
+          parent_names: context?.parentNames?.length ? context.parentNames : undefined,
+          sibling_names: context?.siblingNames?.length ? context.siblingNames : undefined,
+        });
         // Ignore les réponses obsolètes (course entre requêtes).
         if (reqId !== reqIdRef.current) return;
         const filtered = matches
@@ -68,7 +80,8 @@ export function PersonSearchSelect({
         if (reqId === reqIdRef.current) setLoading(false);
       }
     },
-    [excludeIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [excludeIds, JSON.stringify(context ?? {})],
   );
 
   useEffect(() => {
