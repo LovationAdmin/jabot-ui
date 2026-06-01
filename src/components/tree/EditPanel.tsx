@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2 } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, GitBranch } from "lucide-react";
 import { relationshipsApi, personsApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
 
@@ -164,11 +164,13 @@ interface EditPanelProps {
   onSelectPerson: (id: string) => void;
   isAuthenticated?: boolean;
   onEdit?: (person: Person) => void;
+  ancestorsActive?: boolean;
+  onToggleAncestors?: () => void;
 }
 
 export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
-  isAuthenticated, onEdit,
+  isAuthenticated, onEdit, ancestorsActive, onToggleAncestors,
 }: EditPanelProps) {
   const { deleteRelationship, addRelationship, getPersonById, deletePerson } = useFamilyTreeStore();
   const [activeGroup, setActiveGroup] = useState("parent");
@@ -503,9 +505,26 @@ export function EditPanel({
         </div>
       </div>
 
+      {/* Bouton surbrillance des ascendants — visible pour tous */}
+      {onToggleAncestors && (
+        <div className="border-t border-border/60 px-4 py-3">
+          <button
+            onClick={onToggleAncestors}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+              ancestorsActive
+                ? "border-amber-400 bg-amber-400/10 text-amber-600"
+                : "border-border text-muted-foreground hover:border-amber-400/50 hover:text-amber-600"
+            }`}
+          >
+            <GitBranch className="size-4" />
+            {ancestorsActive ? "Masquer les ascendants" : "Voir les ascendants"}
+          </button>
+        </div>
+      )}
+
       {/* Actions */}
       {isAuthenticated && (
-        <div className="flex gap-2 border-t border-border/60 p-4">
+        <div className="flex gap-2 p-4">
           <button
             onClick={() => onEdit?.(person)}
             className="brand-gradient flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"

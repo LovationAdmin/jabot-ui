@@ -12,9 +12,11 @@ interface PersonCardProps {
   onSelect: (id: string) => void;
   isAuthenticated?: boolean;
   familyColor?: FamilyColor;
+  // Surbrillance des ascendants : "ancestor" = mis en avant, "dim" = estompé.
+  highlight?: "ancestor" | "dim" | null;
 }
 
-export function PersonCard({ person, selected, onSelect, isAuthenticated = false, familyColor }: PersonCardProps) {
+export function PersonCard({ person, selected, onSelect, isAuthenticated = false, familyColor, highlight }: PersonCardProps) {
   const isDeceased = !!person.deathDate;
   const photo = person.photos[0];
   const fullName = [person.firstName, person.lastName].filter(Boolean).join(" ");
@@ -45,6 +47,9 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
           : "shadow-card hover:-translate-y-0.5 hover:shadow-float",
         !familyColor && (selected ? "border-primary/40 bg-card ring-primary/25" : "border-border/70 bg-card"),
         isDeceased && "opacity-80 grayscale-[15%]",
+        // Surbrillance ascendants : on met en avant la lignée, on estompe le reste.
+        highlight === "ancestor" && "z-10 -translate-y-0.5 ring-2 ring-amber-400 shadow-float",
+        highlight === "dim" && "opacity-30 grayscale",
       )}
     >
       {/* Photo */}
