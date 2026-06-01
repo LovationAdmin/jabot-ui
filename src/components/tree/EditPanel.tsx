@@ -106,48 +106,111 @@ function buildGroups(
         return p ? [{ person: p, relId: r.id, relType: effectiveType(r), inferred: false }] : [];
       });
 
-  // Rôle effectif de l'autre personne vu depuis `srcId` (même logique que
-  // effectiveType mais relative à une source arbitraire, pas à personId).
-  const effectiveTypeFrom = (r: Relationship, srcId: string): string => {
-    if (r.personAId === srcId && INVERSE[r.type]) return INVERSE[r.type];
-    return r.type;
-  };
-
-  // Déduit des liens en remontant depuis chaque source, en respectant le
-  // SENS des arêtes. `types` désigne les rôles effectifs attendus côté source.
-  const infer = (sources: Person[], relType: string, ...types: string[]): RelEntry[] =>
-    sources.flatMap((src) =>
-      relationships
-        .filter(
-          (r) =>
-            (r.personAId === src.id || r.personBId === src.id) &&
-            types.includes(effectiveTypeFrom(r, src.id)),
-        )
-        .flatMap((r) => {
-          const pid = r.personAId === src.id ? r.personBId : r.personAId;
-          if (pid === personId) return [];
-          const p = byId.get(pid);
-          return p ? [{ person: p, relId: undefined, relType, inferred: true }] : [];
-        }),
-    );
-
   const dedup = (arr: RelEntry[]): RelEntry[] =>
     arr.filter((e, i, a) => a.findIndex((x) => x.person.id === e.person.id) === i);
 
+  // ── Adjacence sanguine (parent/enfant) pour la déduction ───────────
+  // On construit les liens de filiation à partir des arêtes parent/child
+  // uniquement (les liens par alliance step_* restent traités à part).
+  const bloodParents = new Map<string, Set<string>>(); // enfant → {parents}
+  const bloodChildren = new Map<string, Set<string>>(); // parent → {enfants}
+  const addEdge = (parent: string, child: string) => {
+    if (!bloodParents.has(child)) bloodParents.set(child, new Set());
+    bloodParents.get(child)!.add(parent);
+    if (!bloodChildren.has(parent)) bloodChildren.set(parent, new Set());
+    bloodChildren.get(parent)!.add(child);
+  };
+  for (const r of relationships) {
+    if (r.type === "parent") addEdge(r.personAId, r.personBId);       // A parent de B
+    else if (r.type === "child") addEdge(r.personBId, r.personAId);   // A enfant de B
+  }
+  const parentsOf = (pid: string) => bloodParents.get(pid) ?? new Set<string>();
+  const childrenOf = (pid: string) => bloodChildren.get(pid) ?? new Set<string>();
+
+  // Fratrie déduite des parents communs : 2+ parents communs → frère/sœur
+  // plein ; exactement 1 parent commun → demi-frère/demi-sœur.
+  const deducedSiblings = (pid: string): RelEntry[] => {
+    const mine = parentsOf(pid);
+    if (mine.size === 0) return [];
+    const out: RelEntry[] = [];
+    for (const q of allPersons) {
+      if (q.id === pid) continue;
+      const theirs = parentsOf(q.id);
+      let common = 0;
+      for (const p of mine) if (theirs.has(p)) common++;
+      if (common === 0) continue;
+      const relType = common >= 2 ? "sibling" : "half_sibling";
+      out.push({ person: q, relId: undefined, relType, inferred: true });
+    }
+    return out;
+  };
+
+  // Enfants déduits (via filiation sanguine) d'un ensemble de personnes.
+  const deducedChildren = (sources: Person[], relType: string): RelEntry[] =>
+    sources.flatMap((src) =>
+      [...childrenOf(src.id)].flatMap((cid) => {
+        if (cid === personId) return [];
+        const p = byId.get(cid);
+        return p ? [{ person: p, relId: undefined, relType, inferred: true }] : [];
+      }),
+    );
+
+  // Parents déduits (via filiation sanguine) d'un ensemble de personnes.
+  const deducedParents = (sources: Person[], relType: string): RelEntry[] =>
+    sources.flatMap((src) =>
+      [...parentsOf(src.id)].flatMap((pid) => {
+        if (pid === personId) return [];
+        const p = byId.get(pid);
+        return p ? [{ person: p, relId: undefined, relType, inferred: true }] : [];
+      }),
+    );
+
   const parents  = directOfType("parent", "step_parent");
   const children = directOfType("child", "step_child");
-  const siblings = directOfType("sibling", "half_sibling", "step_sibling");
-  const unclesAunts = dedup([...directOfType("uncle_aunt"), ...infer(parents.map((e) => e.person), "uncle_aunt", "sibling", "half_sibling", "step_sibling")]);
-  const cousins     = dedup([...directOfType("cousin"),    ...infer(unclesAunts.map((e) => e.person), "cousin", "child", "step_child")]);
-  const nephewsNieces = dedup([...directOfType("nephew_niece"), ...infer(siblings.map((e) => e.person), "nephew_niece", "child", "step_child")]);
+
+  // Fratrie : liens explicites (incl. par alliance) + déduction parents communs.
+  // Les liens explicites priment (dedup garde la 1re occurrence) pour conserver
+  // un éventuel relId et un type saisi manuellement.
+  const siblings = dedup([
+    ...directOfType("sibling", "half_sibling", "step_sibling"),
+    ...deducedSiblings(personId),
+  ]);
+
+  // Grands-parents : parents des parents (+ explicites).
+  const grandparents = dedup([
+    ...directOfType("grandparent"),
+    ...deducedParents(parents.map((e) => e.person), "grandparent"),
+  ]);
+  // Petits-enfants : enfants des enfants (+ explicites).
+  const grandchildren = dedup([
+    ...directOfType("grandchild"),
+    ...deducedChildren(children.map((e) => e.person), "grandchild"),
+  ]);
+  // Oncles/tantes : fratrie des parents (+ explicites). On déduit la fratrie
+  // de CHAQUE parent via les parents communs, pas seulement les liens saisis.
+  const unclesAunts = dedup([
+    ...directOfType("uncle_aunt"),
+    ...parents.flatMap((e) => deducedSiblings(e.person.id)
+      .map((s) => ({ ...s, relType: "uncle_aunt" }))),
+  ]).filter((e) => e.person.id !== personId);
+  // Cousins : enfants des oncles/tantes (+ explicites).
+  const cousins = dedup([
+    ...directOfType("cousin"),
+    ...deducedChildren(unclesAunts.map((e) => e.person), "cousin"),
+  ]).filter((e) => e.person.id !== personId);
+  // Neveux/nièces : enfants de la fratrie (+ explicites).
+  const nephewsNieces = dedup([
+    ...directOfType("nephew_niece"),
+    ...deducedChildren(siblings.map((e) => e.person), "nephew_niece"),
+  ]).filter((e) => e.person.id !== personId);
 
   return {
     spouse:       dedup(directOfType("spouse")),
     parent:       dedup(parents),
-    grandparent:  dedup([...directOfType("grandparent"), ...infer(parents.map((e) => e.person), "grandparent", "parent", "step_parent")]),
-    sibling:      dedup(siblings),
+    grandparent:  grandparents,
+    sibling:      siblings,
     child:        dedup(children),
-    grandchild:   dedup([...directOfType("grandchild"), ...infer(children.map((e) => e.person), "grandchild", "child", "step_child")]),
+    grandchild:   grandchildren,
     uncle_aunt:   unclesAunts,
     nephew_niece: nephewsNieces,
     cousin:       cousins,
