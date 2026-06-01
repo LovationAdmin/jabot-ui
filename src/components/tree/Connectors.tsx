@@ -1,6 +1,11 @@
+import React from "react";
 import { Person, Relationship } from "@/lib/types";
 import { FamilyColor, alpha } from "@/lib/familyColors";
 import { CARD_W, CARD_H } from "./PersonCard";
+
+// Palette de teintes oklch pour les unités FAM — chroma modéré, lisible
+// sur fond clair et sombre. 10 teintes régulièrement espacées.
+const FAM_HUES = [30, 70, 130, 185, 245, 295, 350, 105, 210, 55];
 
 interface ConnectorsProps {
   persons: Person[];
@@ -89,6 +94,23 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     families.get(fam.key)!.children.push(childId);
   }
 
+  // Couleur par unité FAM — une teinte distincte par couple parental.
+  // Trié pour que l'attribution soit déterministe (indépendante de l'ordre
+  // d'itération de la Map), donc stable entre re-renders.
+  const famColorMap = new Map<string, string>();
+  [...families.keys()].sort().forEach((key, i) => {
+    const hue = FAM_HUES[i % FAM_HUES.length];
+    famColorMap.set(key, `oklch(0.52 0.20 ${hue})`);
+  });
+
+  // Aussi indexer les couples conjoints par leur clé pour colorier le lien spouse.
+  const coupleColorMap = new Map<string, string>();
+  for (const [ck, [a, b]] of couples.entries()) {
+    const famKey = coupleKey(a, b);
+    const col = famColorMap.get(famKey);
+    if (col) coupleColorMap.set(ck, col);
+  }
+
   const paths: React.ReactNode[] = [];
 
   // Point de jonction du FAM : centré entre les parents, légèrement sous eux.
@@ -106,7 +128,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     if (parents.length === 0 || children.length === 0) continue;
 
     const j = junctionOf(fam);
-    const stroke = relStroke(fam.parents[0], fam.children[0]);
+    const stroke = famColorMap.get(fam.key) ?? relStroke(fam.parents[0], fam.children[0]);
 
     // Descente de chaque parent vers le point de jonction.
     if (parents.length === 2) {
@@ -149,7 +171,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           stroke={stroke}
           strokeWidth="2"
           fill="none"
-          markerEnd="url(#arrow-down)"
+          markerEnd="url(#arrow-fam)"
         />
       );
     } else {
@@ -169,7 +191,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
             key={`fam-c-${fam.key}-${child.id}`}
             x1={ct.x} y1={forkY} x2={ct.x} y2={ct.y}
             stroke={stroke} strokeWidth="2"
-            markerEnd="url(#arrow-down)"
+            markerEnd="url(#arrow-fam)"
           />
         );
       }
@@ -200,7 +222,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           strokeWidth="1.5"
           strokeDasharray="2 4"
           fill="none"
-          markerEnd="url(#arrow-down)"
+          markerEnd="url(#arrow-fam)"
         />
       );
     }
@@ -221,9 +243,14 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const ca = center(a);
     const cb = center(b);
     const mx = (ca.x + cb.x) / 2;
-    // Conjoints : couleur légèrement différente (teinte rosée propre à la famille)
+    // Même teinte que le nœud FAM de ce couple → cohérence visuelle.
+    const ck = [rel.personAId, rel.personBId].sort().join("|");
+    const famCol = coupleColorMap.get(ck);
     const sc = familyColors?.get(rel.personAId) ?? familyColors?.get(rel.personBId);
-    const spouseStroke = sc ? alpha(sc.accent, 0.6) : "oklch(0.60 0.18 20 / 0.50)";
+    // Variante plus claire du FAM pour le lien conjoint (idem hue, lightness +0.10)
+    const spouseStroke = famCol
+      ? famCol.replace("oklch(0.52 0.20", "oklch(0.65 0.15")
+      : sc ? alpha(sc.accent, 0.6) : "oklch(0.60 0.18 20 / 0.50)";
     paths.push(
       <path
         key={`spouse-${rel.id}`}
@@ -283,9 +310,9 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
       style={{ width, height }}
     >
       <defs>
-        {/* Arrow marker for parent→child direction */}
-        <marker id="arrow-down" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.45 0.12 55 / 0.55)" />
+        {/* context-stroke : la flèche hérite de la couleur du trait qui la porte */}
+        <marker id="arrow-fam" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="context-stroke" />
         </marker>
       </defs>
       {paths}
