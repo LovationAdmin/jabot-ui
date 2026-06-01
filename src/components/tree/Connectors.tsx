@@ -36,110 +36,173 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     return c ? alpha(c.border, a) : `oklch(0.45 0.12 55 / 0.55)`;
   };
 
-  // Group parent→child edges: parentId → Set<childId>
-  const childrenOf = new Map<string, string[]>();
-  const parentsOf = new Map<string, string[]>();
+  // ── Nœuds FAM (unités familiales) ─────────────────────────────────
+  // Plutôt que de tracer une fourche depuis CHAQUE parent (ce qui dédouble
+  // les traits pour un couple), on regroupe les enfants sous un point de
+  // jonction commun à leur couple parental — le « nœud FAM » de la
+  // littérature généalogique (yFiles, GoJS, Topola, GEDCOM). Un parent
+  // marié 2× appartient à 2 FAM ; un enfant partagé entre 2 couples est
+  // rattaché à son couple principal + un lien secondaire en pointillés.
+  const coupleKey = (a: string, b: string) => [a, b].sort().join("|");
 
+  // Couples (paires de conjoints) présents sur le canvas.
+  const couples = new Map<string, [string, string]>();
+  for (const rel of relationships) {
+    if (rel.type !== "spouse") continue;
+    if (!map.get(rel.personAId) || !map.get(rel.personBId)) continue;
+    couples.set(coupleKey(rel.personAId, rel.personBId), [rel.personAId, rel.personBId]);
+  }
+
+  // parentsOf : childId → [parentIds]
+  const parentsOf = new Map<string, string[]>();
+  const addParent = (child: string, parent: string) => {
+    if (!parentsOf.has(child)) parentsOf.set(child, []);
+    if (!parentsOf.get(child)!.includes(parent)) parentsOf.get(child)!.push(parent);
+  };
   for (const rel of relationships) {
     const a = map.get(rel.personAId);
     const b = map.get(rel.personBId);
     if (!a || !b) continue;
+    if (rel.type === "parent") addParent(rel.personBId, rel.personAId);       // a est parent de b
+    else if (rel.type === "child") addParent(rel.personAId, rel.personBId);   // a est enfant de b
+  }
 
-    if (rel.type === "parent") {
-      // person_a is parent of person_b
-      if (!childrenOf.has(rel.personAId)) childrenOf.set(rel.personAId, []);
-      childrenOf.get(rel.personAId)!.push(rel.personBId);
-      if (!parentsOf.has(rel.personBId)) parentsOf.set(rel.personBId, []);
-      parentsOf.get(rel.personBId)!.push(rel.personAId);
-    } else if (rel.type === "child") {
-      // person_a is child of person_b
-      if (!childrenOf.has(rel.personBId)) childrenOf.set(rel.personBId, []);
-      childrenOf.get(rel.personBId)!.push(rel.personAId);
-      if (!parentsOf.has(rel.personAId)) parentsOf.set(rel.personAId, []);
-      parentsOf.get(rel.personAId)!.push(rel.personBId);
+  // Détermine l'unité familiale (FAM) d'un enfant : un couple si deux de ses
+  // parents sont conjoints, sinon le parent principal (seul).
+  const familyForChild = (parents: string[]): { key: string; parents: string[] } => {
+    for (let i = 0; i < parents.length; i++) {
+      for (let j = i + 1; j < parents.length; j++) {
+        if (couples.has(coupleKey(parents[i], parents[j]))) {
+          return { key: coupleKey(parents[i], parents[j]), parents: [parents[i], parents[j]] };
+        }
+      }
     }
+    return { key: `solo|${parents[0]}`, parents: [parents[0]] };
+  };
+
+  interface Family { key: string; parents: string[]; children: string[]; }
+  const families = new Map<string, Family>();
+  for (const [childId, parents] of parentsOf.entries()) {
+    if (parents.length === 0) continue;
+    const fam = familyForChild(parents);
+    if (!families.has(fam.key)) families.set(fam.key, { key: fam.key, parents: fam.parents, children: [] });
+    families.get(fam.key)!.children.push(childId);
   }
 
   const paths: React.ReactNode[] = [];
 
-  // ── Parent→child tree connectors ──────────────────────────────────
-  // For each parent with >1 child: draw a fork (vertical stem → horizontal bar → vertical drops)
-  // For a single child: draw a simple vertical bezier.
-  const drawnParentChild = new Set<string>();
+  // Point de jonction du FAM : centré entre les parents, légèrement sous eux.
+  const FAM_GAP = 30;
+  const junctionOf = (fam: Family): { x: number; y: number } => {
+    const pts = (fam.parents.map((id) => map.get(id)).filter(Boolean) as Person[]).map(bottom);
+    const x = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const y = Math.max(...pts.map((p) => p.y)) + FAM_GAP;
+    return { x, y };
+  };
 
-  for (const [parentId, childIds] of childrenOf.entries()) {
-    const parent = map.get(parentId);
-    if (!parent) continue;
+  for (const fam of families.values()) {
+    const parents = fam.parents.map((id) => map.get(id)).filter(Boolean) as Person[];
+    const children = fam.children.map((id) => map.get(id)).filter(Boolean) as Person[];
+    if (parents.length === 0 || children.length === 0) continue;
 
-    const children = childIds.map((id) => map.get(id)).filter(Boolean) as Person[];
-    if (children.length === 0) continue;
+    const j = junctionOf(fam);
+    const stroke = relStroke(fam.parents[0], fam.children[0]);
 
-    const parentBottom = bottom(parent);
-
-    if (children.length === 1) {
-      const childTop = top(children[0]);
-      const my = (parentBottom.y + childTop.y) / 2;
-      const key = `pc-${parentId}-${children[0].id}`;
-      if (!drawnParentChild.has(key)) {
-        drawnParentChild.add(key);
+    // Descente de chaque parent vers le point de jonction.
+    if (parents.length === 2) {
+      for (const p of parents) {
+        const pb = bottom(p);
         paths.push(
           <path
-            key={key}
-            d={`M ${parentBottom.x} ${parentBottom.y} C ${parentBottom.x} ${my}, ${childTop.x} ${my}, ${childTop.x} ${childTop.y}`}
-            stroke={relStroke(parentId, children[0].id)}
+            key={`fam-drop-${fam.key}-${p.id}`}
+            d={`M ${pb.x} ${pb.y} L ${pb.x} ${j.y} L ${j.x} ${j.y}`}
+            stroke={stroke}
             strokeWidth="2"
             fill="none"
+          />
+        );
+      }
+      // Petit losange pour matérialiser le nœud FAM (union).
+      paths.push(
+        <circle key={`fam-dot-${fam.key}`} cx={j.x} cy={j.y} r="3" fill={stroke} />
+      );
+    } else {
+      const pb = bottom(parents[0]);
+      paths.push(
+        <line
+          key={`fam-drop-${fam.key}`}
+          x1={pb.x} y1={pb.y} x2={pb.x} y2={j.y}
+          stroke={stroke} strokeWidth="2"
+        />
+      );
+    }
+
+    // Fourche depuis la jonction vers les enfants.
+    const startX = parents.length === 2 ? j.x : bottom(parents[0]).x;
+    if (children.length === 1) {
+      const ct = top(children[0]);
+      const my = (j.y + ct.y) / 2;
+      paths.push(
+        <path
+          key={`fam-c-${fam.key}-${children[0].id}`}
+          d={`M ${startX} ${j.y} C ${startX} ${my}, ${ct.x} ${my}, ${ct.x} ${ct.y}`}
+          stroke={stroke}
+          strokeWidth="2"
+          fill="none"
+          markerEnd="url(#arrow-down)"
+        />
+      );
+    } else {
+      const childTops = children.map(top);
+      const minX = Math.min(...childTops.map((t) => t.x), startX);
+      const maxX = Math.max(...childTops.map((t) => t.x), startX);
+      const forkY = childTops[0].y - (childTops[0].y - j.y) * 0.45;
+
+      paths.push(
+        <line key={`fam-stem-${fam.key}`} x1={startX} y1={j.y} x2={startX} y2={forkY} stroke={stroke} strokeWidth="2" />,
+        <line key={`fam-bar-${fam.key}`} x1={minX} y1={forkY} x2={maxX} y2={forkY} stroke={stroke} strokeWidth="2" />
+      );
+      for (const child of children) {
+        const ct = top(child);
+        paths.push(
+          <line
+            key={`fam-c-${fam.key}-${child.id}`}
+            x1={ct.x} y1={forkY} x2={ct.x} y2={ct.y}
+            stroke={stroke} strokeWidth="2"
             markerEnd="url(#arrow-down)"
           />
         );
       }
-    } else {
-      // Multiple children: fork pattern
-      const childTops = children.map((c) => top(c));
-      const minX = Math.min(...childTops.map((t) => t.x));
-      const maxX = Math.max(...childTops.map((t) => t.x));
-      const forkY = childTops[0].y - (childTops[0].y - parentBottom.y) * 0.45;
-      const forkStroke = relStroke(parentId, childIds[0]);
+    }
+  }
 
+  // ── Liens parentaux secondaires ───────────────────────────────────
+  // Enfant rattaché à un couple mais ayant un autre parent (famille
+  // recomposée, enfant partagé entre deux unions) : trait pointillé direct
+  // depuis ce parent secondaire vers l'enfant, sans dédoubler le nœud.
+  for (const [childId, parents] of parentsOf.entries()) {
+    if (parents.length < 2) continue;
+    const child = map.get(childId);
+    if (!child) continue;
+    const primary = new Set(familyForChild(parents).parents);
+    for (const pid of parents) {
+      if (primary.has(pid)) continue;
+      const p = map.get(pid);
+      if (!p) continue;
+      const pb = bottom(p);
+      const ct = top(child);
+      const my = (pb.y + ct.y) / 2;
       paths.push(
-        <line
-          key={`stem-${parentId}`}
-          x1={parentBottom.x} y1={parentBottom.y}
-          x2={parentBottom.x} y2={forkY}
-          stroke={forkStroke}
-          strokeWidth="2"
+        <path
+          key={`sec-${pid}-${childId}`}
+          d={`M ${pb.x} ${pb.y} C ${pb.x} ${my}, ${ct.x} ${my}, ${ct.x} ${ct.y}`}
+          stroke={relStroke(pid, childId, 0.45)}
+          strokeWidth="1.5"
+          strokeDasharray="2 4"
+          fill="none"
+          markerEnd="url(#arrow-down)"
         />
       );
-
-      const barLeft = Math.min(minX, parentBottom.x);
-      const barRight = Math.max(maxX, parentBottom.x);
-      paths.push(
-        <line
-          key={`bar-${parentId}`}
-          x1={barLeft} y1={forkY}
-          x2={barRight} y2={forkY}
-          stroke={forkStroke}
-          strokeWidth="2"
-        />
-      );
-
-      for (const child of children) {
-        const ct = top(child);
-        const key = `pc-${parentId}-${child.id}`;
-        if (!drawnParentChild.has(key)) {
-          drawnParentChild.add(key);
-          paths.push(
-            <line
-              key={key}
-              x1={ct.x} y1={forkY}
-              x2={ct.x} y2={ct.y}
-              stroke={forkStroke}
-              strokeWidth="2"
-              markerEnd="url(#arrow-down)"
-            />
-          );
-        }
-      }
     }
   }
 
