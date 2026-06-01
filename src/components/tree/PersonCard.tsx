@@ -1,7 +1,7 @@
 import { Person } from "@/lib/types";
 import { FamilyColor, alpha } from "@/lib/familyColors";
 import { cn } from "@/lib/utils";
-import { MapPin, Music, Lock } from "lucide-react";
+import { MapPin, Music, Lock, ChevronUp, ChevronDown } from "lucide-react";
 
 export const CARD_W = 208;
 export const CARD_H = 112;
@@ -12,11 +12,19 @@ interface PersonCardProps {
   onSelect: (id: string) => void;
   isAuthenticated?: boolean;
   familyColor?: FamilyColor;
-  // Surbrillance des ascendants : "ancestor" = mis en avant, "dim" = estompé.
-  highlight?: "ancestor" | "dim" | null;
+  // Surbrillance de lignée : "ancestor"/"descendant" = mis en avant, "dim" = estompé.
+  highlight?: "ancestor" | "descendant" | "dim" | null;
+  // Direction de lignée actuellement mise en surbrillance pour CETTE carte.
+  lineageDir?: "ancestors" | "descendants" | null;
+  // Bascule la surbrillance des ascendants / descendants depuis les flèches.
+  onToggleAncestors?: (id: string) => void;
+  onToggleDescendants?: (id: string) => void;
 }
 
-export function PersonCard({ person, selected, onSelect, isAuthenticated = false, familyColor, highlight }: PersonCardProps) {
+export function PersonCard({
+  person, selected, onSelect, isAuthenticated = false, familyColor, highlight,
+  lineageDir, onToggleAncestors, onToggleDescendants,
+}: PersonCardProps) {
   const isDeceased = !!person.deathDate;
   const photo = person.photos[0];
   const fullName = [person.firstName, person.lastName].filter(Boolean).join(" ");
@@ -47,8 +55,9 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
           : "shadow-card hover:-translate-y-0.5 hover:shadow-float",
         !familyColor && (selected ? "border-primary/40 bg-card ring-primary/25" : "border-border/70 bg-card"),
         isDeceased && "opacity-80 grayscale-[15%]",
-        // Surbrillance ascendants : on met en avant la lignée, on estompe le reste.
+        // Surbrillance de lignée : on met en avant, on estompe le reste.
         highlight === "ancestor" && "z-10 -translate-y-0.5 ring-2 ring-amber-400 shadow-float",
+        highlight === "descendant" && "z-10 -translate-y-0.5 ring-2 ring-sky-400 shadow-float",
         highlight === "dim" && "opacity-30 grayscale",
       )}
     >
@@ -106,6 +115,37 @@ export function PersonCard({ person, selected, onSelect, isAuthenticated = false
         >
           <Music className="size-2.5" style={familyColor ? { color: familyColor.accent } : { color: "var(--color-primary)" }} />
         </div>
+      )}
+
+      {/* Flèches de lignée — visibles sur la carte sélectionnée. La flèche du
+          haut éclaire les ascendants, celle du bas les descendants. */}
+      {selected && onToggleAncestors && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleAncestors(person.id); }}
+          title="Surligner les ascendants"
+          className={cn(
+            "absolute left-1/2 top-0 z-20 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border shadow-sm transition-colors",
+            lineageDir === "ancestors"
+              ? "border-amber-400 bg-amber-400 text-white"
+              : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:text-amber-500",
+          )}
+        >
+          <ChevronUp className="size-3.5" />
+        </button>
+      )}
+      {selected && onToggleDescendants && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleDescendants(person.id); }}
+          title="Surligner les descendants"
+          className={cn(
+            "absolute left-1/2 bottom-0 z-20 grid size-6 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border shadow-sm transition-colors",
+            lineageDir === "descendants"
+              ? "border-sky-400 bg-sky-400 text-white"
+              : "border-border bg-card text-muted-foreground hover:border-sky-400 hover:text-sky-500",
+          )}
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
       )}
     </div>
   );
