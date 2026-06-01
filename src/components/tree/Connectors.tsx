@@ -264,11 +264,22 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
   }
 
   // ── Sibling connectors ────────────────────────────────────────────
-  // On ne trace QUE la fratrie directe. Les liens cousins/homonymes et les
-  // liens étendus (grands-parents, oncles/tantes, neveux…) sont déduits et
-  // restent consultables dans la fiche : les dessiner ici surchargerait le
-  // canvas de courbes croisées illisibles.
+  // On ne trace QUE la fratrie directe. De plus, si deux frères/sœurs sont
+  // déjà reliés via un nœud FAM commun (même couple parental dans l'arbre),
+  // la ligne de fratrie est redondante et bruite la lecture — on la supprime.
+  // Les liens cousins/homonymes et étendus restent dans la fiche seulement.
   const HORIZONTAL_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
+
+  // Paires déjà reliées par un nœud FAM parental commun → pas de ligne fratrie
+  const sibsViaSameFam = new Set<string>();
+  for (const fam of families.values()) {
+    for (let i = 0; i < fam.children.length; i++) {
+      for (let j = i + 1; j < fam.children.length; j++) {
+        sibsViaSameFam.add([fam.children[i], fam.children[j]].sort().join("|"));
+      }
+    }
+  }
+
   const drawnHoriz = new Set<string>();
 
   for (const rel of relationships) {
@@ -278,6 +289,8 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     if (!a || !b) continue;
     const key = [rel.personAId, rel.personBId].sort().join("-");
     if (drawnHoriz.has(key)) continue;
+    // Siblings already visually linked via a shared FAM parent node — skip
+    if (rel.type === "sibling" && sibsViaSameFam.has([rel.personAId, rel.personBId].sort().join("|"))) continue;
     drawnHoriz.add(key);
 
     const ca = center(a);
