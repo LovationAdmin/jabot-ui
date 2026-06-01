@@ -264,7 +264,12 @@ export function EditPanel({
   };
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-border/60 bg-card">
+    <aside className="flex h-full w-full sm:w-80 shrink-0 flex-col border-l border-border/60 bg-card">
+      {/* Indicateur de glissement (mobile uniquement) */}
+      <div className="flex justify-center pt-2 pb-0 sm:hidden">
+        <div className="h-1 w-10 rounded-full bg-border" />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
         <h2 className="font-display text-lg font-semibold text-foreground">Fiche</h2>
