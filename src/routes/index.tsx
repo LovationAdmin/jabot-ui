@@ -40,11 +40,20 @@ function JabotCanvas() {
   const [form, setForm] = useState<FormState>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  // Zoom initial adapté au viewport : plus petit sur mobile pour voir l'ensemble.
+  const [zoom, setZoom] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? 0.45 : 1,
+  );
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+  // Référence pour le pinch-to-zoom sur mobile (2 doigts).
+  const touchRef = useRef<{
+    panX: number; panY: number;
+    initialDist: number; initialZoom: number;
+    midX: number; midY: number;
+  } | null>(null);
 
   // L'onboarding s'affiche une seule fois : connecte mais pas encore rattache.
   const showOnboarding = isAuthenticated && !onboarded;
@@ -93,6 +102,70 @@ function JabotCanvas() {
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, []);
 
+  // ── Touch : pan 1 doigt + pinch zoom 2 doigts ─────────────────
+  // On utilise des listeners natifs { passive: false } pour pouvoir appeler
+  // preventDefault() et bloquer le scroll/zoom natif du navigateur mobile.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchRef.current = {
+          panX: pan.x, panY: pan.y,
+          initialDist: 0, initialZoom: zoom,
+          midX: t.clientX, midY: t.clientY,
+        };
+        dragRef.current = { startX: t.clientX, startY: t.clientY, panX: pan.x, panY: pan.y };
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        dragRef.current = null;
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const midX = (t0.clientX + t1.clientX) / 2;
+        const midY = (t0.clientY + t1.clientY) / 2;
+        touchRef.current = { panX: pan.x, panY: pan.y, initialDist: dist, initialZoom: zoom, midX, midY };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!touchRef.current) return;
+
+      if (e.touches.length === 1 && dragRef.current) {
+        const t = e.touches[0];
+        setPan({
+          x: dragRef.current.panX + (t.clientX - dragRef.current.startX),
+          y: dragRef.current.panY + (t.clientY - dragRef.current.startY),
+        });
+      } else if (e.touches.length === 2 && touchRef.current.initialDist > 0) {
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const scale = dist / touchRef.current.initialDist;
+        const next = Math.min(2.5, Math.max(0.2, touchRef.current.initialZoom * scale));
+        const { midX, midY, panX, panY, initialZoom } = touchRef.current;
+        const worldX = (midX - panX) / initialZoom;
+        const worldY = (midY - panY) / initialZoom;
+        setPan({ x: midX - worldX * next, y: midY - worldY * next });
+        setZoom(next);
+      }
+    };
+
+    const onTouchEnd = () => { touchRef.current = null; dragRef.current = null; };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  // Re-register when pan/zoom change so closures are fresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pan.x, pan.y, zoom]);
+
   const onWheel = (e: React.WheelEvent) => {
     if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 30) {
       setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
@@ -126,12 +199,14 @@ function JabotCanvas() {
     [pan.x, pan.y, viewport.w, viewport.h],
   );
 
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
   // Recadre sur la fiche de l'utilisateur s'il en a une, sinon centre le canvas.
   const reset = () => {
     if (isAuthenticated && personId) {
       centerOnPerson(personId);
     } else {
-      setZoom(1);
+      setZoom(isMobile ? 0.45 : 1);
       setPan({ x: 80, y: 60 });
     }
   };
@@ -160,8 +235,9 @@ function JabotCanvas() {
     const p = getPersonById(pid) ?? tree.persons.find((x) => x.id === pid);
     const wx = p?.position?.x ?? 0;
     const wy = p?.position?.y ?? 0;
-    setZoom(1);
-    setPan({ x: viewport.w / 2 - wx - 104, y: viewport.h / 2 - wy - 50 });
+    const z = isMobile ? 0.7 : 1;
+    setZoom(z);
+    setPan({ x: viewport.w / 2 - wx * z - 104 * z, y: viewport.h / 2 - wy * z - 50 * z });
     setSelectedId(pid);
   };
 
@@ -392,19 +468,33 @@ function JabotCanvas() {
           )}
         </div>
 
-        <EditPanel
-          person={selected}
-          allPersons={tree.persons}
-          relationships={tree.relationships}
-          onClose={() => { setSelectedId(null); setAncestorRootId(null); }}
-          onSelectPerson={(id) => { setSelectedId(id); setAncestorRootId(null); }}
-          isAuthenticated={isAuthenticated}
-          onEdit={(p) => setForm({ mode: "edit", person: p })}
-          ancestorsActive={ancestorRootId !== null && ancestorRootId === selectedId}
-          onToggleAncestors={() =>
-            setAncestorRootId((cur) => (cur === selectedId ? null : selectedId))
-          }
-        />
+        {/* Desktop : sidebar droite. Mobile : bottom sheet glissant. */}
+        <div className={
+          selected
+            ? "sm:relative sm:flex sm:h-full sm:w-80 sm:shrink-0 " +
+              "fixed bottom-0 left-0 right-0 z-40 sm:static max-h-[60vh] sm:max-h-full " +
+              "overflow-hidden rounded-t-2xl sm:rounded-none shadow-2xl sm:shadow-none " +
+              "border-t border-border/60 sm:border-t-0 bg-card sm:bg-transparent " +
+              "transition-transform duration-300 ease-out translate-y-0"
+            : "sm:relative sm:flex sm:h-full sm:w-80 sm:shrink-0 " +
+              "fixed bottom-0 left-0 right-0 z-40 sm:static max-h-[60vh] sm:max-h-full " +
+              "translate-y-full sm:translate-y-0 pointer-events-none sm:pointer-events-auto " +
+              "transition-transform duration-300 ease-out"
+        }>
+          <EditPanel
+            person={selected}
+            allPersons={tree.persons}
+            relationships={tree.relationships}
+            onClose={() => { setSelectedId(null); setAncestorRootId(null); }}
+            onSelectPerson={(id) => { setSelectedId(id); setAncestorRootId(null); }}
+            isAuthenticated={isAuthenticated}
+            onEdit={(p) => setForm({ mode: "edit", person: p })}
+            ancestorsActive={ancestorRootId !== null && ancestorRootId === selectedId}
+            onToggleAncestors={() =>
+              setAncestorRootId((cur) => (cur === selectedId ? null : selectedId))
+            }
+          />
+        </div>
       </main>
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
