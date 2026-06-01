@@ -8,6 +8,7 @@ import { MiniMap } from "@/components/tree/MiniMap";
 import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 import { AccountMenu } from "@/components/tree/AccountMenu";
 import { SurnameLegend } from "@/components/tree/SurnameLegend";
+import { ExportDialog } from "@/components/tree/ExportDialog";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { personsApi } from "@/lib/api";
@@ -51,6 +52,8 @@ function JabotCanvas() {
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const worldRef = useRef<HTMLDivElement | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   // Référence pour le pinch-to-zoom sur mobile (2 doigts).
   const touchRef = useRef<{
@@ -499,6 +502,7 @@ function JabotCanvas() {
           {/* World */}
           {!isLoading && tree.persons.length > 0 && (
             <div
+              ref={worldRef}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 transformOrigin: "0 0",
@@ -535,7 +539,7 @@ function JabotCanvas() {
             />
           )}
 
-          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} />
+          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
           {tree.persons.length > 0 && (
             <MiniMap
@@ -576,6 +580,15 @@ function JabotCanvas() {
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
+      {exportOpen && (
+        <ExportDialog
+          worldRef={worldRef}
+          persons={tree.persons}
+          surnameStats={surnameStats}
+          surnameFilter={surnameFilter}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
   );
 }

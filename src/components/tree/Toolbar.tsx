@@ -1,4 +1,4 @@
-import { Minus, Plus, Maximize2 } from "lucide-react";
+import { Minus, Plus, Maximize2, Download } from "lucide-react";
 
 interface ToolbarProps {
   zoom: number;
@@ -6,9 +6,10 @@ interface ToolbarProps {
   onZoomOut: () => void;
   onCenterSelf: () => void;
   onFitAll: () => void;
+  onExport?: () => void;
 }
 
-export function Toolbar({ zoom, onZoomIn, onZoomOut, onCenterSelf, onFitAll }: ToolbarProps) {
+export function Toolbar({ zoom, onZoomIn, onZoomOut, onCenterSelf, onFitAll, onExport }: ToolbarProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center">
       <div className="glass pointer-events-auto flex items-center gap-1 rounded-full border border-border/60 px-2.5 py-2 shadow-float">
@@ -29,6 +30,14 @@ export function Toolbar({ zoom, onZoomIn, onZoomOut, onCenterSelf, onFitAll }: T
         <Btn onClick={onFitAll} title="Voir tout l'arbre">
           <Maximize2 className="size-4" />
         </Btn>
+        {onExport && (
+          <>
+            <span className="mx-1 h-5 w-px bg-border" />
+            <Btn onClick={onExport} title="Exporter l'arbre (PNG / PDF)">
+              <Download className="size-4" />
+            </Btn>
+          </>
+        )}
       </div>
     </div>
   );
