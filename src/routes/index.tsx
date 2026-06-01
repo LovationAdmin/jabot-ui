@@ -469,15 +469,17 @@ function JabotCanvas() {
         </div>
 
         {/* Desktop : sidebar droite. Mobile : bottom sheet glissant. */}
-        <div className={
+        <div
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          className={
           selected
-            ? "sm:relative sm:flex sm:h-full sm:w-80 sm:shrink-0 " +
-              "fixed bottom-0 left-0 right-0 z-40 sm:static max-h-[60vh] sm:max-h-full " +
-              "overflow-hidden rounded-t-2xl sm:rounded-none shadow-2xl sm:shadow-none " +
+            ? "sm:relative sm:flex sm:h-full sm:w-80 sm:shrink-0 sm:p-0 " +
+              "fixed bottom-0 left-0 right-0 z-40 sm:static " +
+              "rounded-t-2xl sm:rounded-none shadow-2xl sm:shadow-none " +
               "border-t border-border/60 sm:border-t-0 bg-card sm:bg-transparent " +
               "transition-transform duration-300 ease-out translate-y-0"
             : "sm:relative sm:flex sm:h-full sm:w-80 sm:shrink-0 " +
-              "fixed bottom-0 left-0 right-0 z-40 sm:static max-h-[60vh] sm:max-h-full " +
+              "fixed bottom-0 left-0 right-0 z-40 sm:static " +
               "translate-y-full sm:translate-y-0 pointer-events-none sm:pointer-events-auto " +
               "transition-transform duration-300 ease-out"
         }>
