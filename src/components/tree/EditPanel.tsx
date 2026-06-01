@@ -221,9 +221,21 @@ export function EditPanel({
     if (!linkMode || !linkTarget || !person) return;
     setLinkBusy(true);
     try {
+      // Convention : type "parent" = personAId IS PARENT OF personBId.
+      // Pour les types directionnels (parent, child, step_parent, step_child,
+      // grandparent, grandchild, uncle_aunt, nephew_niece), le rôle décrit
+      // ce que la CIBLE est pour la personne courante.
+      // Règle universelle : personAId = cible (porteur du rôle),
+      //                     personBId = personne courante (le point de vue).
+      // Pour les types symétriques (spouse, sibling…) l'ordre n'a pas d'importance.
+      const DIRECTIONAL = new Set([
+        "parent", "child", "step_parent", "step_child",
+        "grandparent", "grandchild", "uncle_aunt", "nephew_niece",
+      ]);
+      const isDirectional = DIRECTIONAL.has(linkMode.relType);
       const rel = await relationshipsApi.create({
-        personAId: person.id,
-        personBId: linkTarget,
+        personAId: isDirectional ? linkTarget : person.id,
+        personBId: isDirectional ? person.id : linkTarget,
         type: linkMode.relType as Relationship["type"],
       });
       addRelationship(rel);
