@@ -286,6 +286,13 @@ function JabotCanvas() {
           {isAuthenticated ? (
             <>
               <button
+                onClick={() => setSearchOpen((o) => !o)}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Search className="size-3.5" />
+                <span className="hidden sm:block">Rechercher</span>
+              </button>
+              <button
                 onClick={() => setForm({ mode: "create" })}
                 className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
