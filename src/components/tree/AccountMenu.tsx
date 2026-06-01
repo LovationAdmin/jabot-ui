@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { User, LogOut, IdCard, ChevronDown } from "lucide-react";
+import { User, LogOut, IdCard, ChevronDown, UserPlus } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
 interface Props {
   onEditMyCard?: () => void;
+  onInvite?: () => void;
 }
 
-export function AccountMenu({ onEditMyCard }: Props) {
+export function AccountMenu({ onEditMyCard, onInvite }: Props) {
   const navigate = useNavigate();
   const { phone, personId, firstName: storedFirstName, logout } = useAuthStore();
   const { getPersonById } = useFamilyTreeStore();
@@ -55,6 +56,14 @@ export function AccountMenu({ onEditMyCard }: Props) {
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <IdCard className="size-4 text-muted-foreground" /> Ma fiche
+              </button>
+            )}
+            {onInvite && (
+              <button
+                onClick={() => { setOpen(false); onInvite(); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <UserPlus className="size-4 text-muted-foreground" /> Inviter un proche
               </button>
             )}
             <button

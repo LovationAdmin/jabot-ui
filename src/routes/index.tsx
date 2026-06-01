@@ -8,8 +8,11 @@ import { MiniMap } from "@/components/tree/MiniMap";
 import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 import { AccountMenu } from "@/components/tree/AccountMenu";
 import { SurnameLegend } from "@/components/tree/SurnameLegend";
+import { ExportDialog } from "@/components/tree/ExportDialog";
+import { InviteManager } from "@/components/tree/InviteManager";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
+import { useTreeSync } from "@/lib/useTreeSync";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
@@ -34,7 +37,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
-  const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
+  const { isAuthenticated, onboarded, personId, userId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
@@ -51,6 +54,9 @@ function JabotCanvas() {
   const [pan, setPan] = useState({ x: 80, y: 60 });
   const [viewport, setViewport] = useState({ w: 1200, h: 700 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const worldRef = useRef<HTMLDivElement | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   // Référence pour le pinch-to-zoom sur mobile (2 doigts).
   const touchRef = useRef<{
@@ -65,6 +71,11 @@ function JabotCanvas() {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  // Synchronisation temps réel : recharge l'arbre quand un autre utilisateur
+  // le modifie (WebSocket). Évite les vues divergentes et les conflits de
+  // modifications concurrentes entre plusieurs connexions.
+  useTreeSync(isAuthenticated, userId, loadTree);
 
   // Si notre fiche est isolee (aucun lien), /tree l'exclut : on la recupere
   // pour que l'utilisateur retrouve toujours sa propre fiche apres connexion.
@@ -319,7 +330,7 @@ function JabotCanvas() {
                 <Plus className="size-4" />
                 <span className="hidden sm:block">Ajouter</span>
               </button>
-              <AccountMenu onEditMyCard={editMyCard} />
+              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} />
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -499,6 +510,7 @@ function JabotCanvas() {
           {/* World */}
           {!isLoading && tree.persons.length > 0 && (
             <div
+              ref={worldRef}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 transformOrigin: "0 0",
@@ -535,7 +547,7 @@ function JabotCanvas() {
             />
           )}
 
-          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} />
+          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
           {tree.persons.length > 0 && (
             <MiniMap
@@ -576,6 +588,16 @@ function JabotCanvas() {
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
+      {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}
+      {exportOpen && (
+        <ExportDialog
+          worldRef={worldRef}
+          persons={tree.persons}
+          surnameStats={surnameStats}
+          surnameFilter={surnameFilter}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
   );
 }

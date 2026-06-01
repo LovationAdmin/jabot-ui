@@ -93,12 +93,29 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      // Pick the best supported format — iOS Safari only supports mp4/aac
+      const preferredTypes = [
+        { mime: "audio/webm;codecs=opus", ext: "webm" },
+        { mime: "audio/webm", ext: "webm" },
+        { mime: "audio/ogg;codecs=opus", ext: "ogg" },
+        { mime: "audio/mp4", ext: "mp4" },
+      ];
+      const chosen = preferredTypes.find((t) =>
+        typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t.mime)
+      ) ?? { mime: "", ext: "audio" };
+
+      const mr = chosen.mime ? new MediaRecorder(stream, { mimeType: chosen.mime }) : new MediaRecorder(stream);
+      const actualMime = mr.mimeType || chosen.mime || "audio/mp4";
+      const ext = actualMime.startsWith("audio/webm") ? "webm"
+        : actualMime.startsWith("audio/ogg") ? "ogg"
+        : actualMime.startsWith("audio/mp4") ? "mp4"
+        : chosen.ext;
+
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `vocal-${Date.now()}.webm`, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: actualMime });
+        const file = new File([blob], `vocal-${Date.now()}.${ext}`, { type: actualMime.split(";")[0] });
         setAudioFiles((ps) => [...ps, file]);
         stream.getTracks().forEach((t) => t.stop());
         setIsRecording(false);

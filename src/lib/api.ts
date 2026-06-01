@@ -351,6 +351,27 @@ export const duplicatesApi = {
   },
 };
 
+// ─── Invitations ──────────────────────────────────────────────────
+
+export const invitationsApi = {
+  create: async (phone: string): Promise<{ invitation_id: string; token: string; dev_code?: string }> => {
+    const { data } = await apiClient.post("/invitations/", { phone });
+    return data;
+  },
+  validate: async (token: string, code: string): Promise<{ success: boolean; message: string }> => {
+    const { data } = await apiClient.post("/invitations/validate", { token, code }, { withCredentials: true });
+    return data;
+  },
+  check: async (): Promise<{ valid: boolean; reason: string }> => {
+    const { data } = await apiClient.get("/invitations/check", { withCredentials: true });
+    return data;
+  },
+  list: async (): Promise<{ id: string; status: string; sms_sent: boolean; expires_at: string; created_at: string; validated_at: string | null }[]> => {
+    const { data } = await apiClient.get("/invitations/list");
+    return data;
+  },
+};
+
 // ─── Admin ────────────────────────────────────────────────────────
 
 export const adminApi = {

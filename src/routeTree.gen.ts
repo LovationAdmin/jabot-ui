@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as InviteRouteImport } from './routes/invite'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as AccountDuplicatesRouteImport } from './routes/account/duplicates'
 import { Route as AccountActivityRouteImport } from './routes/account/activity'
 
+const InviteRoute = InviteRouteImport.update({
+  id: '/invite',
+  path: '/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -43,6 +49,7 @@ const AccountActivityRoute = AccountActivityRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/invite': typeof InviteRoute
   '/account/activity': typeof AccountActivityRoute
   '/account/duplicates': typeof AccountDuplicatesRoute
   '/account/': typeof AccountIndexRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/invite': typeof InviteRoute
   '/account/activity': typeof AccountActivityRoute
   '/account/duplicates': typeof AccountDuplicatesRoute
   '/account': typeof AccountIndexRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/invite': typeof InviteRoute
   '/account/activity': typeof AccountActivityRoute
   '/account/duplicates': typeof AccountDuplicatesRoute
   '/account/': typeof AccountIndexRoute
@@ -67,15 +76,23 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/invite'
     | '/account/activity'
     | '/account/duplicates'
     | '/account/'
     | '/auth/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/account/activity' | '/account/duplicates' | '/account' | '/auth'
+  to:
+    | '/'
+    | '/invite'
+    | '/account/activity'
+    | '/account/duplicates'
+    | '/account'
+    | '/auth'
   id:
     | '__root__'
     | '/'
+    | '/invite'
     | '/account/activity'
     | '/account/duplicates'
     | '/account/'
@@ -84,6 +101,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  InviteRoute: typeof InviteRoute
   AccountActivityRoute: typeof AccountActivityRoute
   AccountDuplicatesRoute: typeof AccountDuplicatesRoute
   AccountIndexRoute: typeof AccountIndexRoute
@@ -92,6 +110,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/invite': {
+      id: '/invite'
+      path: '/invite'
+      fullPath: '/invite'
+      preLoaderRoute: typeof InviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -132,6 +157,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  InviteRoute: InviteRoute,
   AccountActivityRoute: AccountActivityRoute,
   AccountDuplicatesRoute: AccountDuplicatesRoute,
   AccountIndexRoute: AccountIndexRoute,
