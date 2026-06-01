@@ -201,14 +201,35 @@ function JabotCanvas() {
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-  // Recadre sur la fiche de l'utilisateur s'il en a une, sinon centre le canvas.
-  const reset = () => {
+  // Recentre sur la fiche de l'utilisateur (ou sur le canvas si non authentifié).
+  const centerSelf = () => {
     if (isAuthenticated && personId) {
       centerOnPerson(personId);
     } else {
       setZoom(isMobile ? 0.45 : 1);
       setPan({ x: 80, y: 60 });
     }
+  };
+
+  // Zoom-to-fit : ajuste zoom + pan pour que tout l'arbre soit visible.
+  const fitAll = () => {
+    const ps = tree.persons;
+    if (ps.length === 0) { centerSelf(); return; }
+    const PADDING = 60;
+    const CARD_W = 208;
+    const CARD_H = 112;
+    const xs = ps.map((p) => p.position?.x ?? 0);
+    const ys = ps.map((p) => p.position?.y ?? 0);
+    const minX = Math.min(...xs) - PADDING;
+    const maxX = Math.max(...xs) + CARD_W + PADDING;
+    const minY = Math.min(...ys) - PADDING;
+    const maxY = Math.max(...ys) + CARD_H + PADDING;
+    const treeW = maxX - minX;
+    const treeH = maxY - minY;
+    const newZoom = Math.min(viewport.w / treeW, viewport.h / treeH, 1.5);
+    const z = Math.max(0.1, newZoom);
+    setZoom(z);
+    setPan({ x: (viewport.w - treeW * z) / 2 - minX * z, y: (viewport.h - treeH * z) / 2 - minY * z });
   };
 
   const familyColors = computeFamilyColors(tree.persons, tree.relationships);
@@ -477,7 +498,7 @@ function JabotCanvas() {
             </div>
           )}
 
-          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onReset={reset} />
+          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} />
 
           {tree.persons.length > 0 && (
             <MiniMap
