@@ -24,6 +24,12 @@ function RootComponent() {
           // Rafraichit personId / onboarded depuis le serveur (source de verite).
           const me = await authApi.me();
           if (!cancelled) {
+            // Session glissante : on restocke le token frais réémis par /me pour
+            // repousser l'expiration (l'utilisateur actif ne refait jamais l'OTP).
+            if (me.accessToken) {
+              localStorage.setItem("jabot_token", me.accessToken);
+              useAuthStore.setState({ token: me.accessToken });
+            }
             useAuthStore.setState({
               personId: me.personId ?? undefined,
               onboarded: me.onboarded,
