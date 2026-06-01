@@ -380,6 +380,18 @@ export function EditPanel({
     Object.values(groups).flat().map((e) => e.person.id).concat([person.id]),
   );
 
+  // Contexte familial de la personne courante, transmis à la recherche pour
+  // booster les candidats de la même famille (désambiguïsation des homonymes).
+  // Les parents de la personne courante sont aussi les parents de sa fratrie ;
+  // sa fratrie (+ elle-même) sont les frères/sœurs potentiels d'un candidat.
+  const searchContext = {
+    parentNames: (groups.parent ?? []).map((e) => e.person.firstName).filter(Boolean) as string[],
+    siblingNames: [
+      ...(groups.sibling ?? []).map((e) => e.person.firstName),
+      person.firstName,
+    ].filter(Boolean) as string[],
+  };
+
   // Groupes disponibles pour lier directement (pas inférés)
   const directGroups = REL_GROUPS.filter((g) => !g.inferred);
 
@@ -722,6 +734,7 @@ export function EditPanel({
                           selected={linkTarget}
                           onSelect={setLinkTarget}
                           onClear={() => setLinkTarget(null)}
+                          context={searchContext}
                         />
                         <div className="flex gap-2">
                           <button
