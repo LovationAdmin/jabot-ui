@@ -9,6 +9,7 @@ import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 import { AccountMenu } from "@/components/tree/AccountMenu";
 import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { ExportDialog } from "@/components/tree/ExportDialog";
+import { InviteManager } from "@/components/tree/InviteManager";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { personsApi } from "@/lib/api";
@@ -54,6 +55,7 @@ function JabotCanvas() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const worldRef = useRef<HTMLDivElement | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   // Référence pour le pinch-to-zoom sur mobile (2 doigts).
   const touchRef = useRef<{
@@ -322,7 +324,7 @@ function JabotCanvas() {
                 <Plus className="size-4" />
                 <span className="hidden sm:block">Ajouter</span>
               </button>
-              <AccountMenu onEditMyCard={editMyCard} />
+              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} />
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -580,6 +582,7 @@ function JabotCanvas() {
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
+      {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}
       {exportOpen && (
         <ExportDialog
           worldRef={worldRef}
