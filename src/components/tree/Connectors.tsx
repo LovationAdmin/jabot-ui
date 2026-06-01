@@ -87,8 +87,9 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
             key={key}
             d={`M ${parentBottom.x} ${parentBottom.y} C ${parentBottom.x} ${my}, ${childTop.x} ${my}, ${childTop.x} ${childTop.y}`}
             stroke={relStroke(parentId, children[0].id)}
-            strokeWidth="1.5"
+            strokeWidth="2"
             fill="none"
+            markerEnd="url(#arrow-down)"
           />
         );
       }
@@ -106,7 +107,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           x1={parentBottom.x} y1={parentBottom.y}
           x2={parentBottom.x} y2={forkY}
           stroke={forkStroke}
-          strokeWidth="1.5"
+          strokeWidth="2"
         />
       );
 
@@ -118,7 +119,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
           x1={barLeft} y1={forkY}
           x2={barRight} y2={forkY}
           stroke={forkStroke}
-          strokeWidth="1.5"
+          strokeWidth="2"
         />
       );
 
@@ -133,7 +134,8 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
               x1={ct.x} y1={forkY}
               x2={ct.x} y2={ct.y}
               stroke={forkStroke}
-              strokeWidth="1.5"
+              strokeWidth="2"
+              markerEnd="url(#arrow-down)"
             />
           );
         }
@@ -188,17 +190,19 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     if (drawnHoriz.has(key)) continue;
     drawnHoriz.add(key);
 
-    const dashed = DASHED_TYPES.has(rel.type);
     const ca = center(a);
     const cb = center(b);
     const hs = relStroke(rel.personAId, rel.personBId, 0.4);
+    const dashArray = rel.type === "half_sibling" ? "8 4"
+      : rel.type === "step_sibling" ? "6 2 2 2"
+      : undefined; // sibling: solid
     paths.push(
       <line
         key={`horiz-${rel.id}`}
         x1={ca.x} y1={ca.y} x2={cb.x} y2={cb.y}
         stroke={hs}
         strokeWidth="1"
-        strokeDasharray={dashed ? "4 3" : undefined}
+        strokeDasharray={dashArray}
       />
     );
   }
@@ -215,6 +219,12 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
       height={height}
       style={{ width, height }}
     >
+      <defs>
+        {/* Arrow marker for parent→child direction */}
+        <marker id="arrow-down" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.45 0.12 55 / 0.55)" />
+        </marker>
+      </defs>
       {paths}
     </svg>
   );
