@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, GitBranch } from "lucide-react";
-import { relationshipsApi, personsApi } from "@/lib/api";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, GitBranch, Upload, Mic, MicOff, Square } from "lucide-react";
+import { relationshipsApi, personsApi, mediaApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
 
 // ─── Libellés de relations ─────────────────────────────────────────
@@ -172,13 +172,23 @@ export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
   isAuthenticated, onEdit, ancestorsActive, onToggleAncestors,
 }: EditPanelProps) {
-  const { deleteRelationship, addRelationship, getPersonById, deletePerson } = useFamilyTreeStore();
+  const { deleteRelationship, addRelationship, getPersonById, deletePerson, updatePerson } = useFamilyTreeStore();
   const [activeGroup, setActiveGroup] = useState("parent");
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [linkMode, setLinkMode] = useState<{ groupKey: string; relType: string } | null>(null);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Media state
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   if (!person) return null;
 
@@ -246,6 +256,88 @@ export function EditPanel({
     } finally {
       setLinkBusy(false);
     }
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !person) return;
+    setUploadingPhoto(true);
+    try {
+      const media = await mediaApi.upload(person.id, "photo", file);
+      updatePerson(person.id, { photos: [...person.photos, media] });
+    } catch {
+      alert("Échec de l'envoi de la photo.");
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeleteMedia(mediaId: string, type: "photo" | "audio") {
+    if (!person) return;
+    setDeletingMedia(mediaId);
+    try {
+      await mediaApi.delete(mediaId);
+      if (type === "photo") {
+        updatePerson(person.id, { photos: person.photos.filter((m) => m.id !== mediaId) });
+      } else {
+        updatePerson(person.id, { audios: person.audios.filter((m) => m.id !== mediaId) });
+      }
+    } catch {
+      alert("Échec de la suppression.");
+    } finally {
+      setDeletingMedia(null);
+    }
+  }
+
+  async function handleAudioFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !person) return;
+    setUploadingAudio(true);
+    try {
+      const media = await mediaApi.upload(person.id, "audio", file);
+      updatePerson(person.id, { audios: [...person.audios, media] });
+    } catch {
+      alert("Échec de l'envoi de l'audio.");
+    } finally {
+      setUploadingAudio(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], "enregistrement.webm", { type: "audio/webm" });
+        if (!person) return;
+        setUploadingAudio(true);
+        try {
+          const media = await mediaApi.upload(person.id, "audio", file);
+          updatePerson(person.id, { audios: [...person.audios, media] });
+        } catch {
+          alert("Échec de l'envoi de l'enregistrement.");
+        } finally {
+          setUploadingAudio(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      alert("Impossible d'accéder au microphone.");
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setRecording(false);
   }
 
   // Personnes non encore liées (pour le sélecteur "lier")
@@ -346,30 +438,97 @@ export function EditPanel({
           )}
 
           {/* Photos */}
-          {isAuthenticated && person.photos.length > 0 && (
+          {isAuthenticated && (
             <div className="mb-5">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <ImageIcon className="size-3" /> Photos
-              </p>
-              <div className="grid grid-cols-3 gap-1.5">
-                {person.photos.map((ph) => (
-                  <img key={ph.id} src={ph.url} alt="" className="aspect-square rounded-xl object-cover" />
-                ))}
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <ImageIcon className="size-3" /> Photos
+                </p>
+                {person.photos.length < 3 && (
+                  <>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                    <button
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                      className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
+                    >
+                      {uploadingPhoto ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
+                      Ajouter
+                    </button>
+                  </>
+                )}
               </div>
+              {person.photos.length > 0 ? (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {person.photos.map((ph) => (
+                    <div key={ph.id} className="relative group aspect-square">
+                      <img src={ph.url} alt="" className="h-full w-full rounded-xl object-cover" />
+                      <button
+                        onClick={() => handleDeleteMedia(ph.id, "photo")}
+                        disabled={deletingMedia === ph.id}
+                        className="absolute right-1 top-1 hidden group-hover:grid size-5 place-items-center rounded-full bg-black/60 text-white transition-opacity hover:bg-destructive"
+                      >
+                        {deletingMedia === ph.id ? <Loader2 className="size-2.5 animate-spin" /> : <X className="size-2.5" />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/60">Aucune photo</p>
+              )}
             </div>
           )}
 
           {/* Audio */}
-          {isAuthenticated && person.audios.length > 0 && (
+          {isAuthenticated && (
             <div className="mb-5">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Music className="size-3" /> Messages audio
-              </p>
-              <div className="space-y-2">
-                {person.audios.map((au) => (
-                  <audio key={au.id} controls src={au.url} className="w-full" />
-                ))}
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Music className="size-3" /> Messages audio
+                </p>
+                {person.audios.length < 3 && (
+                  <div className="flex items-center gap-1">
+                    <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioFileUpload} />
+                    <button
+                      onClick={() => audioInputRef.current?.click()}
+                      disabled={uploadingAudio || recording}
+                      className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
+                    >
+                      {uploadingAudio ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
+                    </button>
+                    <button
+                      onClick={recording ? stopRecording : startRecording}
+                      disabled={uploadingAudio}
+                      className={`flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] transition-colors disabled:opacity-50 ${
+                        recording
+                          ? "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20 animate-pulse"
+                          : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      {recording ? <Square className="size-3" /> : <Mic className="size-3" />}
+                      {recording ? "Arrêter" : "Enregistrer"}
+                    </button>
+                  </div>
+                )}
               </div>
+              {person.audios.length > 0 ? (
+                <div className="space-y-2">
+                  {person.audios.map((au) => (
+                    <div key={au.id} className="flex items-center gap-2">
+                      <audio controls src={au.url} className="min-w-0 flex-1 h-8" style={{ height: "32px" }} />
+                      <button
+                        onClick={() => handleDeleteMedia(au.id, "audio")}
+                        disabled={deletingMedia === au.id}
+                        className="grid size-7 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
+                      >
+                        {deletingMedia === au.id ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground/60">Aucun audio</p>
+              )}
             </div>
           )}
         </div>
