@@ -12,6 +12,7 @@ import { ExportDialog } from "@/components/tree/ExportDialog";
 import { InviteManager } from "@/components/tree/InviteManager";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
+import { useTreeSync } from "@/lib/useTreeSync";
 import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
@@ -36,7 +37,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
-  const { isAuthenticated, onboarded, personId, logout } = useAuthStore();
+  const { isAuthenticated, onboarded, personId, userId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
@@ -70,6 +71,11 @@ function JabotCanvas() {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  // Synchronisation temps réel : recharge l'arbre quand un autre utilisateur
+  // le modifie (WebSocket). Évite les vues divergentes et les conflits de
+  // modifications concurrentes entre plusieurs connexions.
+  useTreeSync(isAuthenticated, userId, loadTree);
 
   // Si notre fiche est isolee (aucun lien), /tree l'exclut : on la recupere
   // pour que l'utilisateur retrouve toujours sa propre fiche apres connexion.

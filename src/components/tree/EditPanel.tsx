@@ -4,6 +4,7 @@ import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, User
 import { relationshipsApi, personsApi, mediaApi } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
 import { PersonSearchSelect } from "./PersonSearchSelect";
+import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
 
 // ─── Libellés de relations ─────────────────────────────────────────
 
@@ -235,6 +236,11 @@ export function EditPanel({
   isAuthenticated, onEdit,
 }: EditPanelProps) {
   const { deleteRelationship, addRelationship, addPerson, loadTree, getPersonById, deletePerson, updatePerson } = useFamilyTreeStore();
+
+  // Couleurs par nom de famille (même dégradé que le canvas) → report sur les
+  // liens de parenté pour identifier d'un coup d'œil la lignée de chaque proche.
+  const surnameColorMap = buildSurnameColorMap(computeSurnameStats(allPersons));
+  const surnameColorOf = (p: Person) => surnameColorMap.get(normalizeSurname(p.lastName));
   const [activeGroup, setActiveGroup] = useState("parent");
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [linkMode, setLinkMode] = useState<{ groupKey: string; relType: string } | null>(null);
@@ -680,14 +686,31 @@ export function EditPanel({
                 Aucun lien pour le moment. Rattachez une personne existante ci-dessous.
               </p>
             )}
-            {(groups[currentGroup] ?? []).map((entry) => (
+            {(groups[currentGroup] ?? []).map((entry) => {
+              const sc = surnameColorOf(entry.person);
+              return (
               <div key={entry.person.id} className="flex items-center gap-2">
                 <button
                   onClick={() => onSelectPerson(entry.person.id)}
-                  className="flex flex-1 items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-muted min-w-0"
+                  className="relative flex flex-1 items-center gap-2.5 overflow-hidden rounded-xl border border-border bg-background px-3 py-2 pl-4 text-left transition-colors hover:border-primary/40 hover:bg-muted min-w-0"
                 >
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                    {entry.person.firstName?.[0]?.toUpperCase() ?? "?"}
+                  {/* Liseré couleur du nom de famille (même dégradé que le canvas). */}
+                  {sc && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 left-0 w-1.5"
+                      style={{ backgroundColor: sc.band }}
+                    />
+                  )}
+                  <div
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                    style={sc
+                      ? { backgroundColor: sc.soft, color: sc.text }
+                      : undefined}
+                  >
+                    <span className={sc ? "" : "text-primary"}>
+                      {entry.person.firstName?.[0]?.toUpperCase() ?? "?"}
+                    </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">
@@ -717,7 +740,8 @@ export function EditPanel({
                   </button>
                 )}
               </div>
-            ))}
+              );
+            })}
 
             {/* Lier / créer une personne (auth + onglet direct) */}
             {isAuthenticated && directGroups.some((g) => g.key === currentGroup) && (
