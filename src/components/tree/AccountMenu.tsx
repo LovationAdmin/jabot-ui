@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { User, LogOut, IdCard, ChevronDown, UserPlus, History } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
@@ -9,7 +9,6 @@ interface Props {
 }
 
 export function AccountMenu({ onEditMyCard, onInvite }: Props) {
-  const navigate = useNavigate();
   const { phone, personId, firstName: storedFirstName, logout } = useAuthStore();
   const { getPersonById } = useFamilyTreeStore();
   const [open, setOpen] = useState(false);
@@ -66,18 +65,20 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
                 <UserPlus className="size-4 text-muted-foreground" /> Inviter un proche
               </button>
             )}
-            <button
-              onClick={() => { setOpen(false); navigate({ to: "/account/activity" }); }}
+            <Link
+              to="/account/activity"
+              onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <History className="size-4 text-muted-foreground" /> Journal d'activité
-            </button>
-            <button
-              onClick={() => { setOpen(false); navigate({ to: "/account" }); }}
+            </Link>
+            <Link
+              to="/account"
+              onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
-              <User className="size-4 text-muted-foreground" /> Parametres du compte
-            </button>
+              <User className="size-4 text-muted-foreground" /> Paramètres du compte
+            </Link>
             <button
               onClick={() => { setOpen(false); logout(); }}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
