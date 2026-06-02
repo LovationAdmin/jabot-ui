@@ -629,7 +629,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <ImageIcon className="size-3" /> Photos
                 </p>
-                {person.photos.length < 3 && (
+                {person.photos.length < 10 && (
                   <>
                     <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                     <button
@@ -671,7 +671,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Music className="size-3" /> Messages audio
                 </p>
-                {person.audios.length < 3 && (
+                {person.audios.length < 10 && (
                   <div className="flex items-center gap-1">
                     <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioFileUpload} />
                     <button
