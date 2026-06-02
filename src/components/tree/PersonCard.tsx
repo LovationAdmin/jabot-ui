@@ -35,8 +35,8 @@ export function PersonCard({
   const deathYear = person.deathDate?.slice(0, 4);
   const years = birthYear ? (deathYear ? `${birthYear} – ${deathYear}` : `${birthYear} –`) : null;
 
-  const borderColor = familyColor?.border;
-  const bgColor = familyColor?.bg;
+  const borderColor = surnameColor?.band ?? familyColor?.border;
+  const bgColor = surnameColor?.soft ?? familyColor?.bg;
   const accentColor = familyColor?.accent;
 
   return (
@@ -48,7 +48,7 @@ export function PersonCard({
         height: CARD_H,
         left: person.position?.x ?? 0,
         top: person.position?.y ?? 0,
-        borderColor: selected ? accentColor : (borderColor ?? undefined),
+        borderColor: selected ? (accentColor ?? surnameColor?.band) : (borderColor ?? undefined),
         backgroundColor: bgColor ?? undefined,
       }}
       className={cn(
@@ -56,9 +56,8 @@ export function PersonCard({
         selected
           ? "-translate-y-0.5 shadow-card-selected ring-2"
           : "shadow-card hover:-translate-y-0.5 hover:shadow-float",
-        !familyColor && (selected ? "border-primary/40 bg-card ring-primary/25" : "border-border/70 bg-card"),
+        !familyColor && !surnameColor && (selected ? "border-primary/40 bg-card ring-primary/25" : "border-border/70 bg-card"),
         isDeceased && "opacity-80 grayscale-[15%]",
-        // Surbrillance de lignée : on met en avant, on estompe le reste.
         highlight === "ancestor" && "z-10 -translate-y-0.5 ring-2 ring-amber-400 shadow-float",
         highlight === "descendant" && "z-10 -translate-y-0.5 ring-2 ring-sky-400 shadow-float",
         highlight === "dim" && "opacity-30 grayscale",
@@ -68,7 +67,7 @@ export function PersonCard({
       {surnameColor && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-2xl"
+          className="pointer-events-none absolute inset-x-0 top-0 h-2 rounded-t-2xl"
           style={{ backgroundColor: surnameColor.band }}
         />
       )}
@@ -85,9 +84,11 @@ export function PersonCard({
             className="flex h-full w-full items-center justify-center text-xl text-white"
             style={familyColor
               ? { background: `linear-gradient(135deg, ${familyColor.accent}, ${familyColor.border})` }
+              : surnameColor
+              ? { background: `linear-gradient(135deg, ${surnameColor.band}, ${surnameColor.text})` }
               : undefined}
           >
-            {!familyColor && <span className="brand-gradient absolute inset-0" />}
+            {!familyColor && !surnameColor && <span className="brand-gradient absolute inset-0" />}
             <span className="relative">{person.firstName?.[0]?.toUpperCase() ?? "?"}</span>
           </div>
         ) : (
