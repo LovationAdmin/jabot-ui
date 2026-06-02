@@ -217,15 +217,22 @@ function JabotCanvas() {
     (factor: number) => {
       setZoom((z) => {
         const next = Math.min(2.5, Math.max(0.3, z * factor));
-        const cx = viewport.w / 2;
-        const cy = viewport.h / 2;
+        // If a card is selected, zoom around its centre; otherwise use viewport centre.
+        const selected = selectedId ? tree.persons.find((p) => p.id === selectedId) : null;
+        const CARD_W = 208, CARD_H = 112;
+        const cx = selected
+          ? pan.x + ((selected.position?.x ?? 0) + CARD_W / 2) * z
+          : viewport.w / 2;
+        const cy = selected
+          ? pan.y + ((selected.position?.y ?? 0) + CARD_H / 2) * z
+          : viewport.h / 2;
         const worldX = (cx - pan.x) / z;
         const worldY = (cy - pan.y) / z;
         setPan({ x: cx - worldX * next, y: cy - worldY * next });
         return next;
       });
     },
-    [pan.x, pan.y, viewport.w, viewport.h],
+    [pan.x, pan.y, viewport.w, viewport.h, selectedId, tree.persons],
   );
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
