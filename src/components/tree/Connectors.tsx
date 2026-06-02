@@ -322,7 +322,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
       <defs>
         {/* context-stroke : la flèche hérite de la couleur du trait qui la porte */}
         <marker id="arrow-fam" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="context-stroke" />
+          <path d="M0,0 L6,3 L0,6 Z" fill="inherit" />
         </marker>
       </defs>
       {paths}

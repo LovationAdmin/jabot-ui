@@ -14,6 +14,75 @@ interface ExportDialogProps {
 
 type Format = "png" | "pdf";
 
+/** Draw the SVG connector layer onto a canvas element and return it. */
+async function rasterizeSvg(svgEl: SVGSVGElement): Promise<HTMLCanvasElement> {
+  const w = svgEl.width.baseVal.value || parseInt(svgEl.getAttribute("width") ?? "3000");
+  const h = svgEl.height.baseVal.value || parseInt(svgEl.getAttribute("height") ?? "2000");
+
+  // Clone and fix context-stroke markers (not supported in standalone SVG images)
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.querySelectorAll<SVGPathElement>('[fill="inherit"]').forEach((el) =>
+    el.setAttribute("fill", "rgba(80,60,120,0.55)")
+  );
+  // Ensure the clone has explicit dimensions
+  clone.setAttribute("width", String(w));
+  clone.setAttribute("height", String(h));
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = url;
+  });
+  URL.revokeObjectURL(url);
+
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+  return c;
+}
+
+/** Add a dot-grid background + composite the captured content on top. */
+function compositeWithBackground(
+  src: HTMLCanvasElement,
+  offsetX: number,
+  offsetY: number,
+): HTMLCanvasElement {
+  const scale = 2; // matches html2canvas scale
+  const dotRadius = 0.8 * scale;
+  const gridStep = 30 * scale;
+
+  const out = document.createElement("canvas");
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext("2d")!;
+
+  // Background
+  ctx.fillStyle = "hsl(270, 18%, 97%)";
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  // Dot grid (origin aligned to the world's 0,0 minus the crop offset)
+  ctx.fillStyle = "hsla(267, 30%, 46%, 0.13)";
+  const startX = ((-offsetX * scale) % gridStep + gridStep) % gridStep;
+  const startY = ((-offsetY * scale) % gridStep + gridStep) % gridStep;
+  for (let x = startX - gridStep; x <= out.width; x += gridStep) {
+    for (let y = startY - gridStep; y <= out.height; y += gridStep) {
+      ctx.beginPath();
+      ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Cards + connectors on top
+  ctx.drawImage(src, 0, 0);
+  return out;
+}
+
 export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, onClose }: ExportDialogProps) {
   const [format, setFormat] = useState<Format>("png");
   const [applyFilter, setApplyFilter] = useState(surnameFilter.size > 0);
@@ -21,7 +90,6 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) onClose();
@@ -35,10 +103,13 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
     setExporting(true);
     setError(null);
     try {
-      // Compute bounding box of visible (non-dimmed) persons
-      const CARD_W = 208, CARD_H = 112, PADDING = 60;
+      const CARD_W = 208, CARD_H = 112, PADDING = 80;
       const visible = applyFilter && surnameFilter.size > 0
-        ? persons.filter((p) => surnameFilter.has((p.lastName ?? "").trim().toLocaleLowerCase("fr").normalize("NFD").replace(/[̀-ͯ]/g, "")))
+        ? persons.filter((p) =>
+            surnameFilter.has(
+              (p.lastName ?? "").trim().toLocaleLowerCase("fr").normalize("NFD").replace(/[̀-ͯ]/g, "")
+            )
+          )
         : persons;
 
       if (visible.length === 0) {
@@ -56,14 +127,11 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
 
       const { default: html2canvas } = await import("html2canvas");
 
-      // html2canvas cannot handle CSS transforms on the captured element.
-      // We temporarily strip the transform so positions map to world coordinates,
-      // then restore it after capture.
       const el = worldRef.current;
       const savedTransform = el.style.transform;
       el.style.transform = "none";
 
-      // When filter is active, hide dimmed cards so they don't appear in the export.
+      // Hide dimmed cards when filter is active
       const hiddenEls: HTMLElement[] = [];
       if (applyFilter && surnameFilter.size > 0) {
         const visibleIds = new Set(visible.map((p) => p.id));
@@ -75,9 +143,23 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
         });
       }
 
-      let canvas: HTMLCanvasElement;
+      // Rasterize the SVG connector layer so html2canvas can include it
+      const svgEl = el.querySelector<SVGSVGElement>("svg");
+      let svgCanvas: HTMLCanvasElement | null = null;
+      if (svgEl) {
+        try {
+          svgCanvas = await rasterizeSvg(svgEl);
+          // Give the canvas the same CSS position as the SVG
+          svgCanvas.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;";
+          svgEl.replaceWith(svgCanvas);
+        } catch {
+          // If rasterization fails, proceed without connectors
+        }
+      }
+
+      let raw: HTMLCanvasElement;
       try {
-        canvas = await html2canvas(el, {
+        raw = await html2canvas(el, {
           x: minX,
           y: minY,
           width: maxX - minX,
@@ -86,15 +168,19 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
           useCORS: true,
           allowTaint: false,
           imageTimeout: 8000,
-          backgroundColor: "#faf9f7",
+          backgroundColor: null, // we handle the background ourselves
           logging: false,
         });
       } finally {
         el.style.transform = savedTransform;
         hiddenEls.forEach((n) => (n.style.visibility = ""));
+        if (svgCanvas && svgEl) svgCanvas.replaceWith(svgEl);
       }
 
-      const filename = `jabot-arbre-${Date.now()}`;
+      // Add dot-grid background and composite
+      const canvas = compositeWithBackground(raw, minX, minY);
+
+      const filename = `jabot-arbre-${new Date().toISOString().slice(0, 10)}`;
 
       if (format === "png") {
         canvas.toBlob((blob) => {
@@ -111,7 +197,6 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
         const imgData = canvas.toDataURL("image/jpeg", 0.92);
         const pxW = canvas.width / 2;
         const pxH = canvas.height / 2;
-        // A4 landscape if wide, portrait if tall
         const landscape = pxW > pxH;
         const pdf = new jsPDF({ orientation: landscape ? "landscape" : "portrait", unit: "px", format: [pxW, pxH] });
         pdf.addImage(imgData, "JPEG", 0, 0, pxW, pxH);
@@ -140,7 +225,7 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
         </div>
 
         <p className="mt-1 text-xs text-muted-foreground">
-          Génère une image haute résolution de votre arbre généalogique.
+          Image haute résolution avec le fond et les traits de parenté.
         </p>
 
         {/* Format */}
@@ -162,7 +247,6 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
           ))}
         </div>
 
-        {/* Filter option */}
         {hasFilter && (
           <label className="mt-3 flex cursor-pointer items-center gap-2.5 rounded-xl border border-border px-3 py-2.5">
             <input
@@ -172,15 +256,13 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
               className="accent-primary"
             />
             <span className="text-xs text-foreground">
-              Exporter uniquement les noms filtrés
+              Noms filtrés uniquement
               <span className="ml-1 text-muted-foreground">({surnameFilter.size} nom{surnameFilter.size > 1 ? "s" : ""})</span>
             </span>
           </label>
         )}
 
-        {error && (
-          <p className="mt-2 text-xs text-destructive">{error}</p>
-        )}
+        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
 
         <button
           onClick={doExport}
