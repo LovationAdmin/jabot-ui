@@ -70,6 +70,7 @@ interface FamilyTreeStore {
   isWakingServer: boolean;
   error: string | null;
   selectedPersonId: string | null;
+  fitPending: boolean;
 
   loadTree: () => Promise<void>;
   addPerson: (person: Person) => void;
@@ -79,6 +80,8 @@ interface FamilyTreeStore {
   deleteRelationship: (id: string) => void;
   setSelectedPerson: (id: string | null) => void;
   getPersonById: (id: string) => Person | undefined;
+  requestFitTree: () => void;
+  clearFitPending: () => void;
 }
 
 export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
@@ -87,6 +90,7 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   isWakingServer: false,
   error: null,
   selectedPersonId: null,
+  fitPending: false,
 
   // Charge l'arbre avec plusieurs tentatives + backoff. Le plan gratuit Render
   // met le serveur en veille après inactivité : un cold start prend 30-60s.
@@ -141,4 +145,7 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   setSelectedPerson: (id) => set({ selectedPersonId: id }),
 
   getPersonById: (id) => get().tree.persons.find((p) => p.id === id),
+
+  requestFitTree: () => set({ fitPending: true }),
+  clearFitPending: () => set({ fitPending: false }),
 }));

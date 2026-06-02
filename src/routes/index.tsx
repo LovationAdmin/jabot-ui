@@ -39,7 +39,7 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson } = useFamilyTreeStore();
+  const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson, fitPending, clearFitPending } = useFamilyTreeStore();
   const { isAuthenticated, onboarded, personId, userId, logout } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -76,6 +76,15 @@ function JabotCanvas() {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  useEffect(() => {
+    if (!fitPending) return;
+    clearFitPending();
+    // Small delay so the store tree state is rendered before fitting.
+    const t = setTimeout(fitAll, 80);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitPending]);
 
   // Synchronisation temps réel : recharge l'arbre quand un autre utilisateur
   // le modifie (WebSocket). Évite les vues divergentes et les conflits de
