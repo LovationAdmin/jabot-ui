@@ -610,12 +610,12 @@ export function EditPanel({
               {person.photos.length > 0 ? (
                 <div className="grid grid-cols-3 gap-1.5">
                   {person.photos.map((ph) => (
-                    <div key={ph.id} className="relative group aspect-square">
+                    <div key={ph.id} className="relative aspect-square">
                       <img src={ph.url} alt="" className="h-full w-full rounded-xl object-cover" />
                       <button
                         onClick={() => handleDeleteMedia(ph.id, "photo")}
                         disabled={deletingMedia === ph.id}
-                        className="absolute right-1 top-1 hidden group-hover:grid size-5 place-items-center rounded-full bg-black/60 text-white transition-opacity hover:bg-destructive"
+                        className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/50 text-white transition-colors hover:bg-destructive"
                       >
                         {deletingMedia === ph.id ? <Loader2 className="size-2.5 animate-spin" /> : <X className="size-2.5" />}
                       </button>
@@ -663,16 +663,19 @@ export function EditPanel({
               </div>
               {person.audios.length > 0 ? (
                 <div className="space-y-2">
-                  {person.audios.map((au) => (
-                    <div key={au.id} className="flex items-center gap-2">
-                      <audio controls src={au.url} className="min-w-0 flex-1 h-8" style={{ height: "32px" }} />
-                      <button
-                        onClick={() => handleDeleteMedia(au.id, "audio")}
-                        disabled={deletingMedia === au.id}
-                        className="grid size-7 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
-                      >
-                        {deletingMedia === au.id ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
-                      </button>
+                  {person.audios.map((au, i) => (
+                    <div key={au.id} className="rounded-xl border border-border bg-background/60 p-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">Audio {i + 1}{au.duration ? ` · ${Math.round(au.duration)}s` : ""}</span>
+                        <button
+                          onClick={() => handleDeleteMedia(au.id, "audio")}
+                          disabled={deletingMedia === au.id}
+                          className="grid size-5 place-items-center rounded-full text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+                        >
+                          {deletingMedia === au.id ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                        </button>
+                      </div>
+                      <audio controls src={au.url} className="w-full" style={{ height: "32px" }} />
                     </div>
                   ))}
                 </div>
