@@ -256,6 +256,7 @@ export function EditPanel({
 
   // Media state
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -488,6 +489,7 @@ export function EditPanel({
   const personSurnameColor = surnameColorOf(person);
 
   return (
+    <>
     <aside className="flex max-h-[44vh] sm:max-h-none h-full w-full sm:w-80 shrink-0 flex-col border-l border-border/60 bg-card">
       {/* Indicateur de glissement (mobile uniquement) */}
       <div className="flex justify-center pt-2 pb-0 sm:hidden">
@@ -521,7 +523,12 @@ export function EditPanel({
               <div className="relative mx-auto mb-4 size-24">
                 <div className="size-24 overflow-hidden rounded-3xl">
                   {isAuthenticated && currentPhoto ? (
-                    <img src={currentPhoto.url} alt={fullName} className="h-full w-full object-cover" />
+                    <img
+                      src={currentPhoto.url}
+                      alt={fullName}
+                      onClick={() => setLightboxIndex(safeIdx)}
+                      className="h-full w-full cursor-zoom-in object-cover"
+                    />
                   ) : isAuthenticated ? (
                     <div
                       className="flex h-full w-full items-center justify-center text-4xl text-white"
@@ -645,9 +652,14 @@ export function EditPanel({
               </div>
               {person.photos.length > 0 ? (
                 <div className="grid grid-cols-3 gap-1.5">
-                  {person.photos.map((ph) => (
+                  {person.photos.map((ph, i) => (
                     <div key={ph.id} className="relative aspect-square">
-                      <img src={ph.url} alt="" className="h-full w-full rounded-xl object-cover" />
+                      <img
+                        src={ph.url}
+                        alt=""
+                        onClick={() => setLightboxIndex(i)}
+                        className="h-full w-full cursor-zoom-in rounded-xl object-cover"
+                      />
                       <button
                         onClick={() => handleDeleteMedia(ph.id, "photo")}
                         disabled={deletingMedia === ph.id}
@@ -958,5 +970,77 @@ export function EditPanel({
         </div>
       )}
     </aside>
+
+    {/* Lightbox */}
+    {lightboxIndex !== null && person.photos.length > 0 && (() => {
+      const photos = person.photos;
+      const idx = Math.min(lightboxIndex, photos.length - 1);
+      const prev = () => setLightboxIndex((idx - 1 + photos.length) % photos.length);
+      const next = () => setLightboxIndex((idx + 1) % photos.length);
+      return (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setLightboxIndex(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setLightboxIndex(null);
+            if (e.key === "ArrowLeft") { e.stopPropagation(); prev(); }
+            if (e.key === "ArrowRight") { e.stopPropagation(); next(); }
+          }}
+          tabIndex={0}
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+        >
+          {/* Close */}
+          <button
+            onClick={() => setLightboxIndex(null)}
+            className="absolute right-4 top-4 grid size-9 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/20"
+          >
+            <X className="size-5" />
+          </button>
+
+          {/* Prev */}
+          {photos.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); prev(); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 grid size-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/20"
+            >
+              <ChevronLeft className="size-6" />
+            </button>
+          )}
+
+          {/* Image */}
+          <img
+            src={photos[idx].url}
+            alt={fullName}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
+          />
+
+          {/* Next */}
+          {photos.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); next(); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 grid size-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/20"
+            >
+              <ChevronRight className="size-6" />
+            </button>
+          )}
+
+          {/* Dots */}
+          {photos.length > 1 && (
+            <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-2">
+              {photos.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); }}
+                  className={`size-2 rounded-full transition-colors ${i === idx ? "bg-white" : "bg-white/30"}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })()}
+    </>
   );
 }
