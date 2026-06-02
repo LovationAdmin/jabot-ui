@@ -92,8 +92,9 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   // met le serveur en veille après inactivité : un cold start prend 30-60s.
   // On réessaie donc au lieu d'afficher tout de suite une erreur.
   loadTree: async () => {
-    // Délais allongés : Render free tier peut prendre jusqu'à 90s pour un cold start.
-    const delays = [0, 5000, 10000, 20000, 40000]; // ~75s cumulés
+    // Délais courts : plan Standard Render, pas de cold start. Les retries
+    // couvrent les erreurs transitoires réseau (déploiement en cours, etc.).
+    const delays = [0, 1000, 3000, 8000, 15000]; // ~27s cumulés
     set({ isLoading: true, isWakingServer: false });
 
     for (let attempt = 0; attempt < delays.length; attempt++) {
