@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { User, LogOut, IdCard, ChevronDown, UserPlus } from "lucide-react";
+import { User, LogOut, IdCard, ChevronDown, UserPlus, History } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
 interface Props {
@@ -66,6 +66,12 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
                 <UserPlus className="size-4 text-muted-foreground" /> Inviter un proche
               </button>
             )}
+            <button
+              onClick={() => { setOpen(false); navigate({ to: "/account/activity" }); }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+            >
+              <History className="size-4 text-muted-foreground" /> Journal d'activité
+            </button>
             <button
               onClick={() => { setOpen(false); navigate({ to: "/account" }); }}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
