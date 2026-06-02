@@ -387,6 +387,7 @@ export function EditPanel({
 
   async function handleDeleteMedia(mediaId: string, type: "photo" | "audio") {
     if (!person) return;
+    if (!confirm(type === "photo" ? "Supprimer cette photo ?" : "Supprimer cet audio ?")) return;
     setDeletingMedia(mediaId);
     try {
       await mediaApi.delete(mediaId);
@@ -396,7 +397,7 @@ export function EditPanel({
         updatePerson(person.id, { audios: person.audios.filter((m) => m.id !== mediaId) });
       }
     } catch {
-      alert("Échec de la suppression.");
+      setMediaError("Échec de la suppression.");
     } finally {
       setDeletingMedia(null);
     }
