@@ -1,8 +1,9 @@
 import axios from "axios";
 import { FamilyTree, MediaFile, Person, Relationship, SearchResult } from "./types";
+import { apiBaseUrl } from "./config";
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
+  baseURL: apiBaseUrl(),
   headers: { "Content-Type": "application/json" },
 });
 
