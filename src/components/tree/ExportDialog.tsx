@@ -63,6 +63,18 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
       const savedTransform = el.style.transform;
       el.style.transform = "none";
 
+      // When filter is active, hide dimmed cards so they don't appear in the export.
+      const hiddenEls: HTMLElement[] = [];
+      if (applyFilter && surnameFilter.size > 0) {
+        const visibleIds = new Set(visible.map((p) => p.id));
+        el.querySelectorAll<HTMLElement>("[data-person-id]").forEach((node) => {
+          if (!visibleIds.has(node.dataset.personId!)) {
+            node.style.visibility = "hidden";
+            hiddenEls.push(node);
+          }
+        });
+      }
+
       let canvas: HTMLCanvasElement;
       try {
         canvas = await html2canvas(el, {
@@ -79,6 +91,7 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
         });
       } finally {
         el.style.transform = savedTransform;
+        hiddenEls.forEach((n) => (n.style.visibility = ""));
       }
 
       const filename = `jabot-arbre-${Date.now()}`;

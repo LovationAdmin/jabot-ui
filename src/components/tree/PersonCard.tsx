@@ -42,6 +42,7 @@ export function PersonCard({
   return (
     <div
       data-card
+      data-person-id={person.id}
       onClick={() => onSelect(person.id)}
       style={{
         width: CARD_W,
