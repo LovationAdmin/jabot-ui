@@ -38,9 +38,9 @@ export function colorForIndex(index: number, total: number): SurnameColor {
   const loop = Math.floor(index / span);
   const hue = (HUE_START + (index % span) * (360 / span) + loop * (360 / (span * 2))) % 360;
   return {
-    band: `oklch(0.62 0.19 ${hue})`,
-    soft: `oklch(0.95 0.045 ${hue})`,
-    text: `oklch(0.45 0.16 ${hue})`,
+    band: `hsl(${hue}, 62%, 48%)`,
+    soft: `hsl(${hue}, 55%, 94%)`,
+    text: `hsl(${hue}, 55%, 35%)`,
   };
 }
 
