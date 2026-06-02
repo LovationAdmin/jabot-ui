@@ -41,7 +41,7 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-float">
+        <div className="absolute right-0 top-10 z-50 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-float">
           <div className="border-b border-border px-4 py-3">
             <p className="text-sm font-medium text-foreground">
               {me ? `${me.firstName} ${me.lastName}`.trim() : (displayName ?? "Mon compte")}

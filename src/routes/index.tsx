@@ -361,7 +361,7 @@ function JabotCanvas() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-canvas text-foreground">
       {/* Header */}
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/85 px-5 backdrop-blur-md">
+      <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/85 px-5 backdrop-blur-md">
         <div className="flex items-center gap-2.5">
           <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
             <TreePine className="size-4" />
