@@ -32,6 +32,7 @@ export function useTreeSync(
     let pingTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
+    const MAX_ATTEMPTS = 6; // give up after ~63 s total, avoid infinite console spam
     let closed = false;
 
     // Coalesce : si plusieurs événements arrivent rapprochés, on ne recharge
@@ -72,7 +73,7 @@ export function useTreeSync(
       ws.onclose = () => {
         if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
         if (closed) return;
-        // Backoff exponentiel plafonné à 30 s.
+        if (attempts >= MAX_ATTEMPTS) return; // stop spamming after several failures
         const delay = Math.min(1000 * 2 ** attempts, 30000);
         attempts += 1;
         reconnectTimer = setTimeout(connect, delay);

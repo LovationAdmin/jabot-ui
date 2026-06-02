@@ -1,16 +1,9 @@
 /**
  * Upload DIRECT navigateur → Cloudinary.
  *
- * Le backend signe la requête (POST /media/sign) puis le fichier est envoyé
- * directement à Cloudinary, sans transiter par le serveur. Avantages :
- * - pas de limite de taille/timeout de requête côté backend (un vocal de 45 min
- *   peut peser des dizaines de Mo) ;
- * - le worker unique n'est jamais bloqué par le transfert ;
- * - bande passante divisée par deux (un seul saut réseau pour les octets).
- *
- * Les gros fichiers sont envoyés en MORCEAUX (protocole chunké Cloudinary :
- * en-tête Content-Range + X-Unique-Upload-Id), ce qui évite de tout garder en
- * mémoire et permet une barre de progression fiable sur mobile.
+ * Les photos sont compressées côté navigateur avant envoi (max 1 400 px,
+ * JPEG 82 %) pour réduire la taille de 70–90 % sur les clichés mobiles.
+ * Les gros fichiers audio sont envoyés en morceaux (chunked upload).
  */
 
 export interface CloudinarySignature {
@@ -29,7 +22,34 @@ export interface CloudinaryUploadResult {
   duration?: number;
 }
 
-const CHUNK_SIZE = 20 * 1024 * 1024; // 20 Mo par morceau
+const CHUNK_SIZE = 20 * 1024 * 1024; // 20 Mo
+const PHOTO_MAX_PX = 1400;           // largeur / hauteur max après compression
+const PHOTO_QUALITY = 0.82;          // qualité JPEG (0–1)
+
+/** Compresse une image via Canvas → Blob JPEG. */
+export async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const ratio = Math.min(PHOTO_MAX_PX / img.width, PHOTO_MAX_PX / img.height, 1);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (blob) => resolve(blob ?? file),
+        "image/jpeg",
+        PHOTO_QUALITY,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
 
 function uploadEndpoint(sign: CloudinarySignature): string {
   return `https://api.cloudinary.com/v1_1/${sign.cloud_name}/${sign.resource_type}/upload`;
@@ -37,8 +57,6 @@ function uploadEndpoint(sign: CloudinarySignature): string {
 
 function buildForm(sign: CloudinarySignature, chunk: Blob): FormData {
   const form = new FormData();
-  // L'ordre n'importe pas ; ces champs DOIVENT correspondre à ce qui a été signé
-  // côté serveur (folder + timestamp) + api_key + signature.
   form.append("api_key", sign.api_key);
   form.append("timestamp", String(sign.timestamp));
   form.append("signature", sign.signature);
@@ -51,10 +69,6 @@ function randomId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/**
- * Envoie un seul morceau (ou le fichier entier) via XHR pour rapporter la
- * progression. `range` (optionnel) active le mode chunké.
- */
 function putChunk(
   sign: CloudinarySignature,
   chunk: Blob,
@@ -77,10 +91,13 @@ function putChunk(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        // Réponse vide tant que des morceaux restent à venir.
         if (!xhr.responseText) return resolve(null);
         try {
           const json = JSON.parse(xhr.responseText);
+          if (json.error) {
+            reject(new Error(`Cloudinary : ${json.error.message ?? JSON.stringify(json.error)}`));
+            return;
+          }
           resolve({
             public_id: json.public_id,
             secure_url: json.secure_url,
@@ -91,17 +108,18 @@ function putChunk(
           resolve(null);
         }
       } else {
-        reject(new Error(`Cloudinary ${xhr.status}: ${xhr.responseText}`));
+        let detail = xhr.responseText;
+        try { detail = JSON.parse(xhr.responseText)?.error?.message ?? detail; } catch { /* ignore */ }
+        reject(new Error(`Cloudinary ${xhr.status} : ${detail}`));
       }
     };
-    xhr.onerror = () => reject(new Error("Échec réseau pendant l'upload"));
+    xhr.onerror = () => reject(new Error("Échec réseau lors de l'upload vers Cloudinary"));
+    xhr.ontimeout = () => reject(new Error("Délai dépassé lors de l'upload vers Cloudinary"));
+    xhr.timeout = 120_000; // 2 min max par chunk
     xhr.send(buildForm(sign, chunk));
   });
 }
 
-/**
- * Téléverse `file` vers Cloudinary. `onProgress` reçoit une valeur 0–1.
- */
 export async function uploadToCloudinary(
   file: File | Blob,
   sign: CloudinarySignature,
@@ -109,17 +127,15 @@ export async function uploadToCloudinary(
 ): Promise<CloudinaryUploadResult> {
   const total = file.size;
 
-  // Petit fichier : un seul envoi.
   if (total <= CHUNK_SIZE) {
     const result = await putChunk(sign, file, null, null, (loaded) => {
       onProgress?.(total ? loaded / total : 0);
     });
-    if (!result) throw new Error("Réponse Cloudinary vide");
+    if (!result) throw new Error("Réponse Cloudinary vide — réessayez");
     onProgress?.(1);
     return result;
   }
 
-  // Gros fichier : envoi chunké séquentiel.
   const uploadId = randomId();
   let uploaded = 0;
   let final: CloudinaryUploadResult | null = null;
@@ -136,7 +152,7 @@ export async function uploadToCloudinary(
     );
     uploaded = end;
   }
-  if (!final) throw new Error("Upload chunké incomplet (pas de réponse finale)");
+  if (!final) throw new Error("Upload chunké incomplet — réessayez");
   onProgress?.(1);
   return final;
 }

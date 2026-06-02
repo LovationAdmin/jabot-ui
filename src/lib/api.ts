@@ -1,7 +1,7 @@
 import axios from "axios";
 import { FamilyTree, MediaFile, Person, Relationship, SearchResult } from "./types";
 import { apiBaseUrl } from "./config";
-import { uploadToCloudinary, CloudinarySignature } from "./cloudinaryUpload";
+import { uploadToCloudinary, compressImage, CloudinarySignature } from "./cloudinaryUpload";
 
 const apiClient = axios.create({
   baseURL: apiBaseUrl(),
@@ -341,7 +341,11 @@ export const mediaApi = {
       person_id: personId,
       media_type: mediaType,
     });
-    const result = await uploadToCloudinary(file, sign, onProgress);
+    // Compress photos before upload (reduces size by 70–90% on mobile shots)
+    const payload = mediaType === "photo" && file instanceof File
+      ? await compressImage(file)
+      : file;
+    const result = await uploadToCloudinary(payload, sign, onProgress);
     const { data } = await apiClient.post<BackendMedia>("/media", {
       person_id: personId,
       media_type: mediaType,

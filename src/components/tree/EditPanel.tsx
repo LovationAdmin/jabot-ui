@@ -261,6 +261,7 @@ export function EditPanel({
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [photoProgress, setPhotoProgress] = useState(0);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
@@ -369,11 +370,14 @@ export function EditPanel({
     if (!file || !person) return;
     setUploadingPhoto(true);
     setPhotoProgress(0);
+    setMediaError(null);
     try {
       const media = await mediaApi.uploadDirect(person.id, "photo", file, setPhotoProgress);
       updatePerson(person.id, { photos: [...person.photos, media] });
-    } catch {
-      alert("Échec de l'envoi de la photo.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      console.error("[Photo upload]", err);
+      setMediaError(msg);
     } finally {
       setUploadingPhoto(false);
       setPhotoProgress(0);
@@ -403,11 +407,14 @@ export function EditPanel({
     if (!file || !person) return;
     setUploadingAudio(true);
     setAudioProgress(0);
+    setMediaError(null);
     try {
       const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
       updatePerson(person.id, { audios: [...person.audios, media] });
-    } catch {
-      alert("Échec de l'envoi de l'audio.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      console.error("[Audio upload]", err);
+      setMediaError(msg);
     } finally {
       setUploadingAudio(false);
       setAudioProgress(0);
@@ -417,13 +424,16 @@ export function EditPanel({
 
   async function uploadRecordedAudio(file: File) {
     if (!person) return;
+    setMediaError(null);
     setUploadingAudio(true);
     setAudioProgress(0);
     try {
       const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
       updatePerson(person.id, { audios: [...person.audios, media] });
-    } catch {
-      alert("Échec de l'envoi de l'enregistrement.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      console.error("[Recording upload]", err);
+      setMediaError(msg);
     } finally {
       setUploadingAudio(false);
       setAudioProgress(0);
@@ -565,6 +575,14 @@ export function EditPanel({
             <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="size-3.5 shrink-0" />
               <span>{person.cityOfOrigin}</span>
+            </div>
+          )}
+
+          {/* Media error */}
+          {mediaError && (
+            <div className="mb-3 flex items-start gap-2 rounded-xl bg-destructive/10 px-3 py-2">
+              <p className="flex-1 text-xs text-destructive">{mediaError}</p>
+              <button onClick={() => setMediaError(null)} className="shrink-0 text-destructive/60 hover:text-destructive">✕</button>
             </div>
           )}
 
