@@ -473,12 +473,19 @@ export function EditPanel({
     return (g?.types ?? []).map((t) => ({ value: t, label: REL_LABEL[t] ?? t }));
   };
 
+  const personSurnameColor = surnameColorOf(person);
+
   return (
     <aside className="flex max-h-[44vh] sm:max-h-none h-full w-full sm:w-80 shrink-0 flex-col border-l border-border/60 bg-card">
       {/* Indicateur de glissement (mobile uniquement) */}
       <div className="flex justify-center pt-2 pb-0 sm:hidden">
         <div className="h-1 w-10 rounded-full bg-border" />
       </div>
+
+      {/* Bandeau couleur nom de famille */}
+      {personSurnameColor && (
+        <div className="h-2 w-full shrink-0" style={{ backgroundColor: personSurnameColor.band }} />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
@@ -498,8 +505,14 @@ export function EditPanel({
             {isAuthenticated && photo ? (
               <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
             ) : isAuthenticated ? (
-              <div className="brand-gradient flex h-full w-full items-center justify-center text-4xl text-white">
-                {person.firstName?.[0]?.toUpperCase() ?? "?"}
+              <div
+                className="flex h-full w-full items-center justify-center text-4xl text-white"
+                style={personSurnameColor
+                  ? { background: `linear-gradient(135deg, ${personSurnameColor.band}, ${personSurnameColor.text})` }
+                  : undefined}
+              >
+                {!personSurnameColor && <span className="brand-gradient absolute inset-0" />}
+                <span className="relative">{person.firstName?.[0]?.toUpperCase() ?? "?"}</span>
               </div>
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-muted">
@@ -512,7 +525,7 @@ export function EditPanel({
           <div className="mb-5 text-center">
             <h3 className="font-display text-2xl font-bold text-foreground">{fullName}</h3>
             {isAuthenticated && person.nicknames && person.nicknames.length > 0 && (
-              <p className="mt-0.5 text-sm text-primary/80">&laquo; {person.nicknames.join(", ")} &raquo;</p>
+              <p className="mt-0.5 text-sm" style={personSurnameColor ? { color: personSurnameColor.text } : { color: "var(--color-primary)" }}>&laquo; {person.nicknames.join(", ")} &raquo;</p>
             )}
             {/* Badge homonyme */}
             {groups.homonym?.length > 0 && (

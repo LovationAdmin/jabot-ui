@@ -56,17 +56,29 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
 
       const { default: html2canvas } = await import("html2canvas");
 
-      const canvas = await html2canvas(worldRef.current, {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#faf9f7",
-        logging: false,
-      });
+      // html2canvas cannot handle CSS transforms on the captured element.
+      // We temporarily strip the transform so positions map to world coordinates,
+      // then restore it after capture.
+      const el = worldRef.current;
+      const savedTransform = el.style.transform;
+      el.style.transform = "none";
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(el, {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#faf9f7",
+          logging: false,
+        });
+      } finally {
+        el.style.transform = savedTransform;
+      }
 
       const filename = `jabot-arbre-${Date.now()}`;
 
