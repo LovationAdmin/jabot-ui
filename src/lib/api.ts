@@ -28,6 +28,7 @@ interface BackendMedia {
   url: string;
   duration_seconds?: number | null;
   order_index?: number;
+  uploader_name?: string | null;
 }
 
 interface PersonResponse {
@@ -80,7 +81,7 @@ function mapGender(g?: string | null): Person["gender"] {
 }
 
 function mapMedia(m: BackendMedia): MediaFile {
-  return { id: m.id, url: m.url, type: m.type, duration: m.duration_seconds ?? undefined, order: m.order_index ?? 0 };
+  return { id: m.id, url: m.url, type: m.type, duration: m.duration_seconds ?? undefined, order: m.order_index ?? 0, uploaderName: m.uploader_name ?? undefined };
 }
 
 export function mapPersonResponseToPerson(p: PersonResponse): Person {

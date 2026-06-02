@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Person, Relationship } from "@/lib/types";
-import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, Upload, Mic, Square, UserPlus } from "lucide-react";
+import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, Upload, Mic, Square, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { relationshipsApi, personsApi, mediaApi } from "@/lib/api";
 import { startVoiceRecording, VoiceRecorder } from "@/lib/recorder";
 import { useFamilyTreeStore } from "@/lib/store";
@@ -255,6 +255,7 @@ export function EditPanel({
   const [newBirth, setNewBirth] = useState("");
 
   // Media state
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -511,26 +512,60 @@ export function EditPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="p-5">
-          {/* Photo */}
-          <div className="relative mx-auto mb-4 size-24 overflow-hidden rounded-3xl">
-            {isAuthenticated && photo ? (
-              <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
-            ) : isAuthenticated ? (
-              <div
-                className="flex h-full w-full items-center justify-center text-4xl text-white"
-                style={personSurnameColor
-                  ? { background: `linear-gradient(135deg, ${personSurnameColor.band}, ${personSurnameColor.text})` }
-                  : undefined}
-              >
-                {!personSurnameColor && <span className="brand-gradient absolute inset-0" />}
-                <span className="relative">{person.firstName?.[0]?.toUpperCase() ?? "?"}</span>
+          {/* Photo / slider */}
+          {(() => {
+            const photos = person.photos;
+            const safeIdx = photos.length > 0 ? Math.min(photoIndex, photos.length - 1) : 0;
+            const currentPhoto = photos[safeIdx];
+            return (
+              <div className="relative mx-auto mb-4 size-24">
+                <div className="size-24 overflow-hidden rounded-3xl">
+                  {isAuthenticated && currentPhoto ? (
+                    <img src={currentPhoto.url} alt={fullName} className="h-full w-full object-cover" />
+                  ) : isAuthenticated ? (
+                    <div
+                      className="flex h-full w-full items-center justify-center text-4xl text-white"
+                      style={personSurnameColor
+                        ? { background: `linear-gradient(135deg, ${personSurnameColor.band}, ${personSurnameColor.text})` }
+                        : undefined}
+                    >
+                      {!personSurnameColor && <span className="brand-gradient absolute inset-0" />}
+                      <span className="relative">{person.firstName?.[0]?.toUpperCase() ?? "?"}</span>
+                    </div>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-muted">
+                      <Lock className="size-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                {photos.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setPhotoIndex((safeIdx - 1 + photos.length) % photos.length)}
+                      className="absolute left-[-14px] top-1/2 -translate-y-1/2 grid size-6 place-items-center rounded-full bg-background/90 shadow border border-border text-foreground hover:bg-muted"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setPhotoIndex((safeIdx + 1) % photos.length)}
+                      className="absolute right-[-14px] top-1/2 -translate-y-1/2 grid size-6 place-items-center rounded-full bg-background/90 shadow border border-border text-foreground hover:bg-muted"
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                    <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
+                      {photos.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setPhotoIndex(i)}
+                          className={`size-1.5 rounded-full transition-colors ${i === safeIdx ? "bg-primary" : "bg-border"}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-muted">
-                <Lock className="size-8 text-muted-foreground" />
-              </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Nom */}
           <div className="mb-5 text-center">
@@ -667,7 +702,10 @@ export function EditPanel({
                   {person.audios.map((au, i) => (
                     <div key={au.id} className="rounded-xl border border-border bg-background/60 p-2">
                       <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground">Audio {i + 1}{au.duration ? ` · ${Math.round(au.duration)}s` : ""}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          Audio {i + 1}{au.duration ? ` · ${Math.round(au.duration)}s` : ""}
+                          {au.uploaderName && <span className="ml-1 opacity-70">· {au.uploaderName}</span>}
+                        </span>
                         <button
                           onClick={() => handleDeleteMedia(au.id, "audio")}
                           disabled={deletingMedia === au.id}

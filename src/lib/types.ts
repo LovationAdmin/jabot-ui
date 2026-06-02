@@ -5,6 +5,7 @@ export interface MediaFile {
   duration?: number;
   order: number;
   name?: string;
+  uploaderName?: string;
 }
 
 export interface Person {
