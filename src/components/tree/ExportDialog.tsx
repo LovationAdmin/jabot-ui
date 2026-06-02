@@ -41,6 +41,12 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
         ? persons.filter((p) => surnameFilter.has((p.lastName ?? "").trim().toLocaleLowerCase("fr").normalize("NFD").replace(/[̀-ͯ]/g, "")))
         : persons;
 
+      if (visible.length === 0) {
+        setError("Aucune personne visible à exporter.");
+        setExporting(false);
+        return;
+      }
+
       const xs = visible.map((p) => p.position?.x ?? 0);
       const ys = visible.map((p) => p.position?.y ?? 0);
       const minX = Math.min(...xs) - PADDING;

@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import {
   X, Loader2, Trash2, ChevronRight, ChevronLeft,
-  Plus, UserPlus, Check, Upload, Mic, Square,
+  Plus, UserPlus, Upload, Mic, Square,
 } from "lucide-react";
 import { personsApi, relationshipsApi, mediaApi } from "@/lib/api";
+import { PersonSearchSelect } from "./PersonSearchSelect";
 import { startVoiceRecording, VoiceRecorder } from "@/lib/recorder";
 import { useFamilyTreeStore } from "@/lib/store";
 import { Person, Relationship } from "@/lib/types";
@@ -27,12 +28,11 @@ interface PersonDraft {
   relId?: string;       // set for pre-existing relationships in edit mode
   firstName: string;
   lastName: string;
-  gender: "male" | "female" | "other";
   relType: string;
 }
 
 function emptyDraft(relType: string): PersonDraft {
-  return { _key: Math.random().toString(36).slice(2), firstName: "", lastName: "", gender: "other", relType };
+  return { _key: Math.random().toString(36).slice(2), firstName: "", lastName: "", relType };
 }
 
 interface Props {
@@ -60,7 +60,7 @@ const SIBLING_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
 // ─── Main component ────────────────────────────────────────────────
 
 export function PersonFormDialog({ mode, person, onClose }: Props) {
-  const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship, loadTree } = useFamilyTreeStore();
+  const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship, loadTree, requestFitTree } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -73,7 +73,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     firstName: person?.firstName ?? "",
     lastName: person?.lastName ?? "",
     nickname: person?.nicknames?.[0] ?? "",
-    gender: person?.gender ?? ("other" as Person["gender"]),
     birthDate: person?.birthDate ?? "",
     isDeceased: !!person?.deathDate,
     deathDate: person?.deathDate ?? "",
@@ -133,9 +132,12 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     const newParents: PersonDraft[] = [];
     const newSiblings: PersonDraft[] = [];
     const newRelatives: PersonDraft[] = [];
+    const seen = new Set<string>();
 
     for (const r of personRels) {
       const otherId = r.personAId === person.id ? r.personBId : r.personAId;
+      if (seen.has(otherId)) continue;
+      seen.add(otherId);
       const other = byId.get(otherId);
       if (!other) continue;
       const eff = effectiveTypeFor(r, person.id);
@@ -146,7 +148,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
         existingId: other.id,
         firstName: other.firstName,
         lastName: other.lastName ?? "",
-        gender: other.gender ?? "other",
         relType: eff,
       };
 
@@ -179,7 +180,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim() || undefined,
         nicknames: form.nickname.trim() ? [form.nickname.trim()] : [],
-        gender: form.gender,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
         birthDate: form.birthDate || undefined,
         deathDate: form.isDeceased && form.deathDate ? form.deathDate : undefined,
@@ -227,12 +227,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   }
 
   // ── Save relatives then advance ────────────────────────────────
-  // For directional types (parent, child, grandparent…), the draft's relType
-  // describes what the OTHER person is to the CURRENT person.
-  // Convention: type "parent" means personAId IS PARENT OF personBId.
-  // So if other is current's parent → store (personAId=other, personBId=current, type="parent").
-  // For symmetric types (spouse, sibling…) order doesn't matter.
-  async function commitDrafts(drafts: PersonDraft[], nextStep: () => void) {
+  async function commitDrafts(drafts: PersonDraft[], nextStep: () => void | Promise<void>) {
     const newDrafts = drafts.filter((d) => !d.relId);
     const currentId = savedId ?? person?.id;
     if (!currentId || newDrafts.length === 0) { nextStep(); return; }
@@ -240,8 +235,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     setError(null);
     try {
       for (const d of newDrafts) {
-        // For directional types, the other person goes in personAId slot so
-        // that effectiveTypeFor(r, currentId) returns d.relType correctly.
         const isDirectional = d.relType in INVERSE;
 
         if (d.existingId) {
@@ -257,7 +250,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
           const created = await personsApi.create({
             firstName: d.firstName.trim(),
             lastName: d.lastName.trim() || undefined,
-            gender: d.gender,
           });
           addPerson(created);
           const aId = isDirectional ? created.id : currentId;
@@ -270,7 +262,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
           addRelationship(rel);
         }
       }
-      nextStep();
+      await nextStep();
     } catch {
       setError("Echec lors de l'ajout des proches. Reessayez.");
     } finally {
@@ -368,26 +360,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                     placeholder="Ami"
                     className={inputCls}
                   />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Genre</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["male", "female", "other"] as const).map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => field("gender", g)}
-                        className={`rounded-xl border py-2.5 text-sm font-medium transition-colors ${
-                          form.gender === g
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        {g === "male" ? "Homme" : g === "female" ? "Femme" : "Autre"}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -571,6 +543,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 entries={parents}
                 setEntries={setParents}
                 existingPersons={others}
+                excludeIds={currentId ? new Set([currentId]) : undefined}
                 error={error}
                 busy={busy}
                 onBack={() => goTo("identity", "back")}
@@ -593,6 +566,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 entries={siblings}
                 setEntries={setSiblings}
                 existingPersons={others}
+                excludeIds={currentId ? new Set([currentId]) : undefined}
                 error={error}
                 busy={busy}
                 onBack={() => goTo("parents", "back")}
@@ -622,10 +596,11 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 entries={relatives}
                 setEntries={setRelatives}
                 existingPersons={others}
+                excludeIds={currentId ? new Set([currentId]) : undefined}
                 error={error}
                 busy={busy}
                 onBack={() => goTo("siblings", "back")}
-                onNext={() => commitDrafts(relatives, () => { loadTree(); onClose(); })}
+                onNext={() => commitDrafts(relatives, async () => { await loadTree(); requestFitTree(); onClose(); })}
                 onRemoveExisting={(relId) => removeExistingRel(relId, setRelatives)}
                 isLastStep
                 inputCls={inputCls}
@@ -664,14 +639,17 @@ interface RelativesStepProps {
   onRemoveExisting: (relId: string) => void;
   isLastStep?: boolean;
   inputCls: string;
+  excludeIds?: Set<string>;
 }
 
 function RelativesStep({
   title, hint, relTypeOptions, defaultRelType, entries, setEntries,
   existingPersons, error, busy, onBack, onNext, onRemoveExisting, isLastStep, inputCls,
+  excludeIds,
 }: RelativesStepProps) {
   const [draftMode, setDraftMode] = useState<"new" | "existing" | null>(null);
   const [draft, setDraft] = useState<PersonDraft>(emptyDraft(defaultRelType));
+  const [selectedExisting, setSelectedExisting] = useState<Person | null>(null);
 
   const dField = (k: keyof PersonDraft, v: string) =>
     setDraft((d) => ({ ...d, [k]: v }));
@@ -680,6 +658,7 @@ function RelativesStep({
     if (!draft.firstName.trim() && !draft.existingId) return;
     setEntries((e) => [...e, { ...draft, _key: Math.random().toString(36).slice(2) }]);
     setDraft(emptyDraft(defaultRelType));
+    setSelectedExisting(null);
     setDraftMode(null);
   };
 
@@ -770,22 +749,6 @@ function RelativesStep({
               className={inputCls}
             />
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {(["male", "female", "other"] as const).map((g) => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => dField("gender", g)}
-                className={`rounded-xl border py-2 text-xs font-medium transition-colors ${
-                  draft.gender === g
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50"
-                }`}
-              >
-                {g === "male" ? "Homme" : g === "female" ? "Femme" : "Autre"}
-              </button>
-            ))}
-          </div>
           <div className="flex gap-2">
             <button
               onClick={() => { setDraftMode(null); setDraft(emptyDraft(defaultRelType)); }}
@@ -811,20 +774,26 @@ function RelativesStep({
               ))}
             </select>
           )}
-          <select
+          <PersonSearchSelect
             autoFocus
-            value={draft.existingId ?? ""}
-            onChange={(e) => setDraft((d) => ({ ...d, existingId: e.target.value || undefined }))}
-            className={inputCls}
-          >
-            <option value="">Choisir une personne…</option>
-            {existingPersons.map((p) => (
-              <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
-            ))}
-          </select>
+            selected={selectedExisting}
+            excludeIds={new Set([
+              ...(excludeIds ?? []),
+              ...entries.map((e) => e.existingId).filter(Boolean) as string[],
+            ])}
+            onSelect={(p) => {
+              setSelectedExisting(p);
+              setDraft((d) => ({ ...d, existingId: p.id }));
+            }}
+            onClear={() => {
+              setSelectedExisting(null);
+              setDraft((d) => ({ ...d, existingId: undefined }));
+            }}
+            placeholder="Rechercher une personne dans l'arbre…"
+          />
           <div className="flex gap-2">
             <button
-              onClick={() => { setDraftMode(null); setDraft(emptyDraft(defaultRelType)); }}
+              onClick={() => { setDraftMode(null); setDraft(emptyDraft(defaultRelType)); setSelectedExisting(null); }}
               className="rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
             >
               Annuler
@@ -834,7 +803,7 @@ function RelativesStep({
               disabled={!draft.existingId}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary/10 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
             >
-              <Check className="size-4" /> Lier
+              Lier
             </button>
           </div>
         </div>
