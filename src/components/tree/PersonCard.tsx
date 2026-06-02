@@ -78,7 +78,7 @@ export function PersonCard({
         style={familyColor ? { outline: `2px solid ${alpha(familyColor.border, 0.2)}` } : undefined}
       >
         {isAuthenticated && photo ? (
-          <img src={photo.url} alt={fullName} className="h-full w-full object-cover" />
+          <img src={photo.url} alt={fullName} crossOrigin="anonymous" className="h-full w-full object-cover" />
         ) : isAuthenticated ? (
           <div
             className="flex h-full w-full items-center justify-center text-xl text-white"

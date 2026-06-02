@@ -72,7 +72,8 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
           height: maxY - minY,
           scale: 2,
           useCORS: true,
-          allowTaint: true,
+          allowTaint: false,
+          imageTimeout: 8000,
           backgroundColor: "#faf9f7",
           logging: false,
         });
@@ -105,8 +106,9 @@ export function ExportDialog({ worldRef, persons, surnameStats, surnameFilter, o
       }
       onClose();
     } catch (err) {
-      console.error(err);
-      setError("L'export a échoué. Réessayez ou utilisez une capture d'écran.");
+      console.error("[Export]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Export échoué : ${msg}`);
     } finally {
       setExporting(false);
     }
