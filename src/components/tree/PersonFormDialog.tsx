@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   X, Loader2, Trash2, ChevronRight, ChevronLeft,
-  Plus, UserPlus, Upload, Mic, Square,
+  Plus, UserPlus, Upload, Mic, Square, Check,
 } from "lucide-react";
 import { personsApi, relationshipsApi, mediaApi } from "@/lib/api";
 import { PersonSearchSelect } from "./PersonSearchSelect";
