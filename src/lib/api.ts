@@ -224,6 +224,11 @@ export const personsApi = {
     return data.persons.map(mapPersonResponseToPerson);
   },
 
+  getOne: async (id: string): Promise<Person> => {
+    const { data } = await apiClient.get<PersonResponse>(`/persons/${id}`);
+    return mapPersonResponseToPerson(data);
+  },
+
   create: async (person: Partial<Person>): Promise<Person> => {
     const { data } = await apiClient.post<PersonResponse>("/persons", mapPersonToCreateBody(person));
     return mapPersonResponseToPerson(data);

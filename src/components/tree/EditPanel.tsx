@@ -367,6 +367,14 @@ export function EditPanel({
     }
   }
 
+  async function refreshPersonMedia() {
+    if (!person) return;
+    try {
+      const fresh = await personsApi.getOne(person.id);
+      updatePerson(person.id, { photos: fresh.photos, audios: fresh.audios });
+    } catch { /* ignore — local state already updated */ }
+  }
+
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !person) return;
@@ -374,8 +382,8 @@ export function EditPanel({
     setPhotoProgress(0);
     setMediaError(null);
     try {
-      const media = await mediaApi.uploadDirect(person.id, "photo", file, setPhotoProgress);
-      updatePerson(person.id, { photos: [...person.photos, media] });
+      await mediaApi.uploadDirect(person.id, "photo", file, setPhotoProgress);
+      await refreshPersonMedia();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erreur inconnue";
       console.error("[Photo upload]", err);
@@ -393,11 +401,7 @@ export function EditPanel({
     setDeletingMedia(mediaId);
     try {
       await mediaApi.delete(mediaId);
-      if (type === "photo") {
-        updatePerson(person.id, { photos: person.photos.filter((m) => m.id !== mediaId) });
-      } else {
-        updatePerson(person.id, { audios: person.audios.filter((m) => m.id !== mediaId) });
-      }
+      await refreshPersonMedia();
     } catch {
       setMediaError("Échec de la suppression.");
     } finally {
@@ -412,8 +416,8 @@ export function EditPanel({
     setAudioProgress(0);
     setMediaError(null);
     try {
-      const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
-      updatePerson(person.id, { audios: [...person.audios, media] });
+      await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
+      await refreshPersonMedia();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erreur inconnue";
       console.error("[Audio upload]", err);
@@ -431,8 +435,8 @@ export function EditPanel({
     setUploadingAudio(true);
     setAudioProgress(0);
     try {
-      const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
-      updatePerson(person.id, { audios: [...person.audios, media] });
+      await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
+      await refreshPersonMedia();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erreur inconnue";
       console.error("[Recording upload]", err);
@@ -636,7 +640,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <ImageIcon className="size-3" /> Photos
                 </p>
-                {person.photos.length < 10 && (
+                {person.photos.length < 5 && (
                   <>
                     <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                     <button
@@ -683,7 +687,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Music className="size-3" /> Messages audio
                 </p>
-                {person.audios.length < 10 && (
+                {person.audios.length < 5 && (
                   <div className="flex items-center gap-1">
                     <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioFileUpload} />
                     <button
