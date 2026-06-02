@@ -3,9 +3,9 @@ import { Person, Relationship } from "@/lib/types";
 import { FamilyColor, alpha } from "@/lib/familyColors";
 import { CARD_W, CARD_H } from "./PersonCard";
 
-// Palette de teintes oklch pour les unités FAM — chroma modéré, lisible
-// sur fond clair et sombre. 10 teintes régulièrement espacées.
-const FAM_HUES = [30, 70, 130, 185, 245, 295, 350, 105, 210, 55];
+// Palette HSL pour les unités FAM (couples + enfants). 10 teintes espacées.
+// Hues sont en HSL (pas oklch) pour compatibilité html2canvas.
+const FAM_HUES = [22, 62, 118, 178, 225, 278, 347, 95, 198, 44];
 
 interface ConnectorsProps {
   persons: Person[];
@@ -34,7 +34,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
   // Stroke color for a relationship: use the family color of either endpoint.
   const relStroke = (idA: string, idB: string, a = 0.55): string => {
     const c = familyColors?.get(idA) ?? familyColors?.get(idB);
-    return c ? alpha(c.border, a) : `oklch(0.45 0.12 55 / 0.55)`;
+    return c ? alpha(c.border, a) : `hsla(44, 45%, 38%, 0.55)`;
   };
 
   // ── Nœuds FAM (unités familiales) ─────────────────────────────────
@@ -91,12 +91,13 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
   }
 
   // Couleur par unité FAM — une teinte distincte par couple parental.
-  // Trié pour que l'attribution soit déterministe (indépendante de l'ordre
-  // d'itération de la Map), donc stable entre re-renders.
+  // Trié pour que l'attribution soit déterministe.
   const famColorMap = new Map<string, string>();
+  const famLightMap = new Map<string, string>();
   [...families.keys()].sort().forEach((key, i) => {
     const hue = FAM_HUES[i % FAM_HUES.length];
-    famColorMap.set(key, `oklch(0.52 0.20 ${hue})`);
+    famColorMap.set(key, `hsl(${hue}, 62%, 43%)`);
+    famLightMap.set(key, `hsl(${hue}, 50%, 58%)`);
   });
 
   // Aussi indexer les couples conjoints par leur clé pour colorier le lien spouse.
@@ -245,8 +246,8 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const sc = familyColors?.get(rel.personAId) ?? familyColors?.get(rel.personBId);
     // Variante plus claire du FAM pour le lien conjoint (idem hue, lightness +0.10)
     const spouseStroke = famCol
-      ? famCol.replace("oklch(0.52 0.20", "oklch(0.65 0.15")
-      : sc ? alpha(sc.accent, 0.6) : "oklch(0.60 0.18 20 / 0.50)";
+      ? (famLightMap.get(ck) ?? famCol)
+      : sc ? alpha(sc.accent, 0.6) : "hsla(8, 58%, 50%, 0.50)";
     paths.push(
       <path
         key={`spouse-${rel.id}`}

@@ -1,31 +1,29 @@
 import { Person, Relationship } from "./types";
 
-// Palette de couleurs distinctes pour les familles (teintes oklch)
-// Chaque composante connexe (arbre familial) reçoit une couleur unique.
-// Quand deux arbres fusionnent via un lien, ils partagent automatiquement
-// la même couleur (Union-Find recalcule à chaque rendu).
+// Palette hsl — chaque composante connexe reçoit une couleur unique.
 const PALETTE = [
-  { border: "oklch(0.65 0.18 55)",  bg: "oklch(0.97 0.04 55)",  accent: "oklch(0.55 0.18 55)"  }, // ambre (défaut)
-  { border: "oklch(0.60 0.20 250)", bg: "oklch(0.97 0.04 250)", accent: "oklch(0.50 0.20 250)" }, // bleu
-  { border: "oklch(0.62 0.18 160)", bg: "oklch(0.97 0.04 160)", accent: "oklch(0.52 0.18 160)" }, // vert
-  { border: "oklch(0.60 0.20 310)", bg: "oklch(0.97 0.04 310)", accent: "oklch(0.50 0.20 310)" }, // violet
-  { border: "oklch(0.62 0.22 20)",  bg: "oklch(0.97 0.05 20)",  accent: "oklch(0.52 0.22 20)"  }, // rose
-  { border: "oklch(0.62 0.18 195)", bg: "oklch(0.97 0.04 195)", accent: "oklch(0.52 0.18 195)" }, // teal
-  { border: "oklch(0.65 0.20 75)",  bg: "oklch(0.97 0.04 75)",  accent: "oklch(0.55 0.20 75)"  }, // lime
-  { border: "oklch(0.60 0.15 30)",  bg: "oklch(0.97 0.03 30)",  accent: "oklch(0.50 0.15 30)"  }, // orange
+  { border: "hsl(44, 70%, 55%)",   bg: "hsl(44, 55%, 97%)",   accent: "hsl(44, 68%, 45%)"   }, // ambre
+  { border: "hsl(232, 65%, 50%)",  bg: "hsl(232, 55%, 97%)",  accent: "hsl(232, 65%, 40%)"  }, // bleu
+  { border: "hsl(152, 58%, 48%)",  bg: "hsl(152, 50%, 97%)",  accent: "hsl(152, 58%, 40%)"  }, // vert
+  { border: "hsl(292, 55%, 48%)",  bg: "hsl(292, 48%, 97%)",  accent: "hsl(292, 55%, 40%)"  }, // violet
+  { border: "hsl(8,   68%, 52%)",  bg: "hsl(8,   65%, 97%)",  accent: "hsl(8,   68%, 42%)"  }, // rose
+  { border: "hsl(187, 58%, 46%)",  bg: "hsl(187, 52%, 97%)",  accent: "hsl(187, 58%, 38%)"  }, // teal
+  { border: "hsl(72,  68%, 52%)",  bg: "hsl(72,  58%, 97%)",  accent: "hsl(72,  68%, 43%)"  }, // lime
+  { border: "hsl(24,  58%, 50%)",  bg: "hsl(24,  48%, 97%)",  accent: "hsl(24,  58%, 40%)"  }, // orange
 ];
 
 export type FamilyColor = (typeof PALETTE)[number];
 
 /**
- * Applique une opacité (0-1) à une couleur oklch.
- * oklch(0.65 0.18 55) → oklch(0.65 0.18 55 / 0.5)
- * IMPORTANT : on ne peut PAS juste concaténer un suffixe hex à une couleur
- * oklch (ça produit du CSS invalide → la couleur est ignorée).
+ * Applique une opacité à une couleur hsl.
+ * hsl(44, 70%, 55%) → hsla(44, 70%, 55%, 0.5)
  */
 export function alpha(color: string, a: number): string {
-  const m = color.match(/^oklch\(([^)]+)\)$/);
-  if (m) return `oklch(${m[1]} / ${a})`;
+  const m = color.match(/^hsl\(([^)]+)\)$/);
+  if (m) return `hsla(${m[1]}, ${a})`;
+  // Already hsla — replace the alpha value
+  const ma = color.match(/^hsla\(([^,]+,[^,]+,[^,]+),\s*[\d.]+\)$/);
+  if (ma) return `hsla(${ma[1]}, ${a})`;
   return color;
 }
 
@@ -51,7 +49,6 @@ function buildComponentMap(persons: Person[], relationships: Relationship[]): Ma
     }
   }
 
-  // Normalise: root de chaque nœud
   for (const p of persons) find(p.id);
   return parent;
 }
@@ -69,15 +66,12 @@ export function computeFamilyColors(
 
   const compMap = buildComponentMap(persons, relationships);
 
-  // Compte la taille de chaque composante (par racine)
   const compSize = new Map<string, number>();
   for (const p of persons) {
     const root = compMap.get(p.id)!;
     compSize.set(root, (compSize.get(root) ?? 0) + 1);
   }
 
-  // Trie les composantes par taille décroissante → les plus grandes ont les
-  // premières couleurs de la palette
   const roots = [...compSize.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r);
   const rootColor = new Map<string, FamilyColor>();
   roots.forEach((root, i) => rootColor.set(root, PALETTE[i % PALETTE.length]));
