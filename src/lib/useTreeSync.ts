@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { wsBaseUrl } from "./config";
 
 /**
  * Synchronisation temps réel de l'arbre via WebSocket.
@@ -12,14 +13,6 @@ import { useEffect, useRef } from "react";
  * Robustesse : reconnexion automatique avec backoff exponentiel, ping/pong
  * applicatif pour garder la connexion vivante derrière les proxys.
  */
-
-// Dérive l'URL WebSocket depuis l'URL de l'API REST (http→ws, https→wss).
-function wsBaseUrl(): string {
-  const api = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-  // On retire le suffixe "/api" pour obtenir la racine, puis on ajoute /ws/tree.
-  const root = api.replace(/\/api\/?$/, "");
-  return root.replace(/^http/, "ws") + "/ws/tree";
-}
 
 export function useTreeSync(
   enabled: boolean,
