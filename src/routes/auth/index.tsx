@@ -31,7 +31,7 @@ function apiErrorMessage(err: unknown, fallback: string): string {
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { login } = useAuthStore();
+  const { login, setTreeAccesses } = useAuthStore();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [phoneInput, setPhoneInput] = useState("+221");
@@ -64,6 +64,7 @@ function AuthPage() {
     try {
       const result = await authApi.verifyOtp(phone, otpInput);
       login(result.token, result.userId, phone, { personId: result.personId, onboarded: result.onboarded });
+      setTreeAccesses(result.treeAccesses, result.activeTreeId);
       setStep("success");
       setTimeout(() => navigate({ to: "/" }), 1500);
     } catch (err) {

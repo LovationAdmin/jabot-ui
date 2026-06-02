@@ -2,7 +2,7 @@ import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuthStore } from "@/lib/store";
-import { authApi } from "@/lib/api";
+import { authApi, setActiveTreeId } from "@/lib/api";
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -18,10 +18,12 @@ function RootComponent() {
       // explicitement au demarrage, sinon l'utilisateur repart deconnecte.
       await useAuthStore.persist.rehydrate();
 
-      const { token, isAuthenticated, logout } = useAuthStore.getState();
+      const { token, isAuthenticated, logout, activeTreeId, setTreeAccesses } = useAuthStore.getState();
+      // Resynchronise l'arbre actif persisté vers localStorage (lu par l'intercepteur).
+      if (activeTreeId) setActiveTreeId(activeTreeId);
       if (token && isAuthenticated) {
         try {
-          // Rafraichit personId / onboarded depuis le serveur (source de verite).
+          // Rafraichit personId / onboarded / arbres depuis le serveur (source de verite).
           const me = await authApi.me();
           if (!cancelled) {
             // Session glissante : on restocke le token frais réémis par /me pour
@@ -35,6 +37,7 @@ function RootComponent() {
               onboarded: me.onboarded,
               phone: me.phone,
             });
+            setTreeAccesses(me.treeAccesses, me.activeTreeId);
           }
         } catch (err) {
           // Token expire ou compte supprime : on nettoie la session.

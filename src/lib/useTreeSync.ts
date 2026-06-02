@@ -48,7 +48,9 @@ export function useTreeSync(
 
     const connect = () => {
       if (closed) return;
-      ws = new WebSocket(`${wsBaseUrl()}?token=${encodeURIComponent(token)}`);
+      const activeTree = typeof window !== "undefined" ? localStorage.getItem("jabot_active_tree") : null;
+      const treeParam = activeTree ? `&tree_id=${encodeURIComponent(activeTree)}` : "";
+      ws = new WebSocket(`${wsBaseUrl()}?token=${encodeURIComponent(token)}${treeParam}`);
 
       ws.onopen = () => {
         attempts = 0;

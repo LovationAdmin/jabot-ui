@@ -10,6 +10,7 @@ export interface MediaFile {
 
 export interface Person {
   id: string;
+  familyTreeId?: string;
   firstName: string;
   lastName: string;
   nicknames?: string[];
@@ -43,6 +44,13 @@ export interface AuthState {
   userId?: string;
   phone?: string;
   token?: string;
+}
+
+export interface TreeAccess {
+  treeId: string;
+  treeName: string;
+  role: "owner" | "member" | "visitor";
+  createdAt?: string;
 }
 
 export interface SearchResult {

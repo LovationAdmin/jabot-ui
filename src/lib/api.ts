@@ -1,5 +1,5 @@
 import axios from "axios";
-import { FamilyTree, MediaFile, Person, Relationship, SearchResult } from "./types";
+import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess } from "./types";
 import { apiBaseUrl } from "./config";
 import { uploadToCloudinary, compressImage, CloudinarySignature } from "./cloudinaryUpload";
 
@@ -16,9 +16,24 @@ apiClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("jabot_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    // Arbre actif (multi-tenant) : le backend scope les requêtes dessus.
+    const activeTree = localStorage.getItem("jabot_active_tree");
+    if (activeTree) config.headers["X-Tree-ID"] = activeTree;
   }
   return config;
 });
+
+/** Mémorise l'arbre actif pour l'intercepteur (et le WebSocket). */
+export function setActiveTreeId(treeId: string | null | undefined): void {
+  if (typeof window === "undefined") return;
+  if (treeId) localStorage.setItem("jabot_active_tree", treeId);
+  else localStorage.removeItem("jabot_active_tree");
+}
+
+export function getActiveTreeId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("jabot_active_tree");
+}
 
 // ─── Backend shapes ─────────────────────────────────────────────────────
 
@@ -33,6 +48,7 @@ interface BackendMedia {
 
 interface PersonResponse {
   id: string;
+  family_tree_id?: string | null;
   first_name: string;
   last_name?: string | null;
   nicknames?: string[] | null;
@@ -88,6 +104,7 @@ export function mapPersonResponseToPerson(p: PersonResponse): Person {
   const media = p.media ?? [];
   return {
     id: p.id,
+    familyTreeId: p.family_tree_id ?? undefined,
     firstName: p.first_name,
     lastName: p.last_name ?? "",
     nicknames: p.nicknames ?? [],
@@ -115,6 +132,17 @@ export function mapPersonToCreateBody(person: Partial<Person>) {
 
 // ─── Auth & Onboarding ─────────────────────────────────────────────
 
+interface BackendTreeAccess {
+  tree_id: string;
+  tree_name: string;
+  role: "owner" | "member" | "visitor";
+  created_at?: string | null;
+}
+
+function mapTreeAccess(t: BackendTreeAccess): TreeAccess {
+  return { treeId: t.tree_id, treeName: t.tree_name, role: t.role, createdAt: t.created_at ?? undefined };
+}
+
 export interface MeState {
   userId: string;
   phone: string;
@@ -122,6 +150,8 @@ export interface MeState {
   onboarded: boolean;
   // Token réémis (session glissante) — à restocker pour repousser l'expiration.
   accessToken?: string;
+  treeAccesses: TreeAccess[];
+  activeTreeId: string | null;
 }
 
 export const authApi = {
@@ -133,7 +163,7 @@ export const authApi = {
   verifyOtp: async (
     phone: string,
     code: string,
-  ): Promise<{ token: string; userId: string; phone: string; personId: string | null; onboarded: boolean }> => {
+  ): Promise<{ token: string; userId: string; phone: string; personId: string | null; onboarded: boolean; treeAccesses: TreeAccess[]; activeTreeId: string | null }> => {
     const { data } = await apiClient.post<{
       access_token: string;
       token_type: string;
@@ -141,6 +171,8 @@ export const authApi = {
       phone: string;
       person_id?: string | null;
       onboarded?: boolean;
+      tree_accesses?: BackendTreeAccess[];
+      active_tree_id?: string | null;
     }>("/auth/verify-otp", { phone, code });
     return {
       token: data.access_token,
@@ -148,29 +180,63 @@ export const authApi = {
       phone: data.phone,
       personId: data.person_id ?? null,
       onboarded: data.onboarded ?? false,
+      treeAccesses: (data.tree_accesses ?? []).map(mapTreeAccess),
+      activeTreeId: data.active_tree_id ?? null,
     };
   },
 
   me: async (): Promise<MeState> => {
-    const { data } = await apiClient.get<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean; access_token?: string }>("/auth/me");
-    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false, accessToken: data.access_token };
+    const { data } = await apiClient.get<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean; access_token?: string; tree_accesses?: BackendTreeAccess[]; active_tree_id?: string | null }>("/auth/me");
+    return {
+      userId: data.user_id, phone: data.phone, personId: data.person_id ?? null,
+      onboarded: data.onboarded ?? false, accessToken: data.access_token,
+      treeAccesses: (data.tree_accesses ?? []).map(mapTreeAccess),
+      activeTreeId: data.active_tree_id ?? null,
+    };
   },
 
   // « C'est moi » : rattache le compte a une fiche existante du canvas.
-  linkPerson: async (personId: string): Promise<MeState> => {
-    const { data } = await apiClient.post<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean }>("/auth/link-person", { person_id: personId });
-    return { userId: data.user_id, phone: data.phone, personId: data.person_id ?? null, onboarded: data.onboarded ?? false };
+  linkPerson: async (personId: string, treeId?: string): Promise<MeState> => {
+    const { data } = await apiClient.post<{ user_id: string; phone: string; person_id?: string | null; onboarded?: boolean; tree_accesses?: BackendTreeAccess[]; active_tree_id?: string | null }>("/auth/link-person", { person_id: personId, tree_id: treeId });
+    return {
+      userId: data.user_id, phone: data.phone, personId: data.person_id ?? null,
+      onboarded: data.onboarded ?? false,
+      treeAccesses: (data.tree_accesses ?? []).map(mapTreeAccess),
+      activeTreeId: data.active_tree_id ?? null,
+    };
   },
 
   // « Creer ma fiche » : cree la premiere fiche de l'utilisateur et la rattache.
-  onboard: async (person: Partial<Person>): Promise<Person> => {
-    const { data } = await apiClient.post<PersonResponse>("/auth/onboard", mapPersonToCreateBody(person));
+  // treeId optionnel : si fourni, rejoint cet arbre ; sinon démarre un nouvel arbre.
+  onboard: async (person: Partial<Person>, treeId?: string): Promise<Person> => {
+    const url = treeId ? `/auth/onboard?tree_id=${encodeURIComponent(treeId)}` : "/auth/onboard";
+    const { data } = await apiClient.post<PersonResponse>(url, mapPersonToCreateBody(person));
     return mapPersonResponseToPerson(data);
   },
 
   // Supprime le compte ; la fiche person reste intacte dans l'arbre.
   deleteAccount: async (): Promise<void> => {
     await apiClient.delete("/auth/me");
+  },
+};
+
+// ─── Trees (multi-tenant) ──────────────────────────────────────────
+
+export const treesApi = {
+  list: async (): Promise<TreeAccess[]> => {
+    const { data } = await apiClient.get<{ trees: BackendTreeAccess[] }>("/trees");
+    return (data.trees ?? []).map(mapTreeAccess);
+  },
+  create: async (name?: string): Promise<TreeAccess> => {
+    const { data } = await apiClient.post<BackendTreeAccess>("/trees", { name });
+    return mapTreeAccess(data);
+  },
+  rename: async (treeId: string, name: string): Promise<TreeAccess> => {
+    const { data } = await apiClient.patch<BackendTreeAccess>(`/trees/${treeId}`, { name });
+    return mapTreeAccess(data);
+  },
+  remove: async (treeId: string): Promise<void> => {
+    await apiClient.delete(`/trees/${treeId}`);
   },
 };
 

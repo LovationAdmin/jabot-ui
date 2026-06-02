@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Person, Relationship, AuthState, FamilyTree } from "./types";
-import { treeApi } from "./api";
+import { Person, Relationship, AuthState, FamilyTree, TreeAccess } from "./types";
+import { treeApi, setActiveTreeId } from "./api";
 
 // ─── Auth Store ────────────────────────────────────────────────────
 
@@ -9,14 +9,19 @@ interface AuthStore extends AuthState {
   personId?: string;
   firstName?: string;
   onboarded: boolean;
+  // Multi-arbre : arbres accessibles + arbre actif courant.
+  treeAccesses: TreeAccess[];
+  activeTreeId?: string;
   login: (token: string, userId: string, phone: string, opts?: { personId?: string | null; onboarded?: boolean; firstName?: string }) => void;
   setOnboarded: (personId: string, firstName?: string) => void;
+  setTreeAccesses: (accesses: TreeAccess[], activeTreeId?: string | null) => void;
+  setActiveTree: (treeId: string) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       isAuthenticated: false,
       userId: undefined,
       phone: undefined,
@@ -24,6 +29,8 @@ export const useAuthStore = create<AuthStore>()(
       personId: undefined,
       firstName: undefined,
       onboarded: false,
+      treeAccesses: [],
+      activeTreeId: undefined,
 
       login: (token, userId, phone, opts) => {
         if (typeof window !== "undefined") localStorage.setItem("jabot_token", token);
@@ -40,9 +47,29 @@ export const useAuthStore = create<AuthStore>()(
 
       setOnboarded: (personId, firstName) => set({ personId, firstName, onboarded: true }),
 
+      setTreeAccesses: (accesses, activeTreeId) => {
+        // Conserve l'arbre actif courant s'il fait toujours partie des accès ;
+        // sinon retombe sur celui fourni par le backend, sinon le premier.
+        const current = get().activeTreeId;
+        const ids = new Set(accesses.map((a) => a.treeId));
+        const next =
+          (current && ids.has(current) && current) ||
+          (activeTreeId && ids.has(activeTreeId) && activeTreeId) ||
+          accesses[0]?.treeId ||
+          undefined;
+        setActiveTreeId(next ?? null);
+        set({ treeAccesses: accesses, activeTreeId: next });
+      },
+
+      setActiveTree: (treeId) => {
+        setActiveTreeId(treeId);
+        set({ activeTreeId: treeId });
+      },
+
       logout: () => {
         if (typeof window !== "undefined") localStorage.removeItem("jabot_token");
-        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined, personId: undefined, firstName: undefined, onboarded: false });
+        setActiveTreeId(null);
+        set({ isAuthenticated: false, token: undefined, userId: undefined, phone: undefined, personId: undefined, firstName: undefined, onboarded: false, treeAccesses: [], activeTreeId: undefined });
       },
     }),
     {
@@ -55,6 +82,8 @@ export const useAuthStore = create<AuthStore>()(
         personId: state.personId,
         firstName: state.firstName,
         onboarded: state.onboarded,
+        treeAccesses: state.treeAccesses,
+        activeTreeId: state.activeTreeId,
       }),
       skipHydration: true,
     },

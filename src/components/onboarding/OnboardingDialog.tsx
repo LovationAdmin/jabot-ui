@@ -48,7 +48,7 @@ function isLikelyDuplicate(r: SearchResult): boolean {
 }
 
 export function OnboardingDialog({ onCompleted }: Props) {
-  const { setOnboarded } = useAuthStore();
+  const { setOnboarded, setActiveTree, setTreeAccesses } = useAuthStore();
   const { addPerson, addRelationship, loadTree } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
@@ -166,6 +166,10 @@ export function OnboardingDialog({ onCompleted }: Props) {
     try {
       // 1. Rattacher le compte à la fiche existante
       const me = await authApi.linkPerson(personId);
+      // Basculer sur l'arbre de cette fiche AVANT toute écriture (les liens
+      // ci-dessous sont scopés sur l'arbre actif via le header X-Tree-ID).
+      if (me.activeTreeId) setActiveTree(me.activeTreeId);
+      setTreeAccesses(me.treeAccesses, me.activeTreeId);
       const linked = results.find((r) => r.person.id === personId)?.person;
 
       // 2. Enrichir la fiche cible avec les données fraîchement saisies
@@ -218,6 +222,9 @@ export function OnboardingDialog({ onCompleted }: Props) {
         birthDate: form.birthDate || undefined,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
+      // L'onboard sans tree_id crée un NOUVEL arbre : on bascule dessus AVANT
+      // de créer les proches (sinon ils seraient écrits dans le mauvais arbre).
+      if (created.familyTreeId) setActiveTree(created.familyTreeId);
       addPerson(created);
       setOnboarded(created.id, created.firstName);
 
@@ -228,6 +235,9 @@ export function OnboardingDialog({ onCompleted }: Props) {
       //    par le backend (sinon tous les proches restent empilés en (0,0) et
       //    seul le dernier est visible sur le canvas).
       await loadTree();
+
+      // Rafraîchit la liste des arbres (pour le sélecteur d'arbres, Phase 3).
+      try { const me = await authApi.me(); setTreeAccesses(me.treeAccesses, created.familyTreeId); } catch { /* non bloquant */ }
 
       onCompleted?.(created.id);
     } catch {
