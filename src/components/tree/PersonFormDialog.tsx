@@ -28,12 +28,11 @@ interface PersonDraft {
   relId?: string;       // set for pre-existing relationships in edit mode
   firstName: string;
   lastName: string;
-  gender: "male" | "female" | "other";
   relType: string;
 }
 
 function emptyDraft(relType: string): PersonDraft {
-  return { _key: Math.random().toString(36).slice(2), firstName: "", lastName: "", gender: "other", relType };
+  return { _key: Math.random().toString(36).slice(2), firstName: "", lastName: "", relType };
 }
 
 interface Props {
@@ -74,7 +73,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
     firstName: person?.firstName ?? "",
     lastName: person?.lastName ?? "",
     nickname: person?.nicknames?.[0] ?? "",
-    gender: person?.gender ?? ("other" as Person["gender"]),
     birthDate: person?.birthDate ?? "",
     isDeceased: !!person?.deathDate,
     deathDate: person?.deathDate ?? "",
@@ -150,7 +148,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
         existingId: other.id,
         firstName: other.firstName,
         lastName: other.lastName ?? "",
-        gender: other.gender ?? "other",
         relType: eff,
       };
 
@@ -183,7 +180,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim() || undefined,
         nicknames: form.nickname.trim() ? [form.nickname.trim()] : [],
-        gender: form.gender,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
         birthDate: form.birthDate || undefined,
         deathDate: form.isDeceased && form.deathDate ? form.deathDate : undefined,
@@ -254,7 +250,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
           const created = await personsApi.create({
             firstName: d.firstName.trim(),
             lastName: d.lastName.trim() || undefined,
-            gender: d.gender,
           });
           addPerson(created);
           const aId = isDirectional ? created.id : currentId;
@@ -365,26 +360,6 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                     placeholder="Ami"
                     className={inputCls}
                   />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Genre</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["male", "female", "other"] as const).map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => field("gender", g)}
-                        className={`rounded-xl border py-2.5 text-sm font-medium transition-colors ${
-                          form.gender === g
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        {g === "male" ? "Homme" : g === "female" ? "Femme" : "Autre"}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -773,22 +748,6 @@ function RelativesStep({
               placeholder="Nom"
               className={inputCls}
             />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {(["male", "female", "other"] as const).map((g) => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => dField("gender", g)}
-                className={`rounded-xl border py-2 text-xs font-medium transition-colors ${
-                  draft.gender === g
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50"
-                }`}
-              >
-                {g === "male" ? "Homme" : g === "female" ? "Femme" : "Autre"}
-              </button>
-            ))}
           </div>
           <div className="flex gap-2">
             <button

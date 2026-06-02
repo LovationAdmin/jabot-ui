@@ -57,7 +57,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
     firstName: "",
     lastName: "",
     nickname: "",
-    gender: "other" as Person["gender"],
     birthDate: "",
     cityOfOrigin: "",
     parentNames: "",
@@ -175,7 +174,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
       if (form.firstName.trim()) patch.firstName = form.firstName.trim();
       if (form.lastName.trim()) patch.lastName = form.lastName.trim();
       if (form.nickname.trim()) patch.nicknames = [form.nickname.trim()];
-      if (form.gender !== "other") patch.gender = form.gender;
       if (form.birthDate) patch.birthDate = form.birthDate;
       if (form.cityOfOrigin.trim()) patch.cityOfOrigin = form.cityOfOrigin.trim();
       if (Object.keys(patch).length > 0) {
@@ -217,7 +215,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim() || undefined,
         nicknames: form.nickname.trim() ? [form.nickname.trim()] : undefined,
-        gender: form.gender,
         birthDate: form.birthDate || undefined,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
@@ -314,25 +311,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     <input type="date" value={form.birthDate} onChange={(e) => field("birthDate", e.target.value)} className={inputCls} />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Genre</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["male", "female", "other"] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => field("gender", g)}
-                          className={`rounded-xl border py-2.5 text-sm font-medium transition-colors ${
-                            form.gender === g
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border bg-background text-muted-foreground hover:border-primary/50"
-                          }`}
-                        >
-                          {g === "male" ? "Homme" : g === "female" ? "Femme" : "Autre"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <button
