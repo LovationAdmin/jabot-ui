@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, UserPlus, Pencil, Trash2, Link2, Unlink, GitMerge,
-  History, Loader2, ChevronDown, Search, X, Calendar,
+  History, Loader2, Search, X, Calendar, User,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { auditApi, AuditEntry } from "@/lib/api";
@@ -14,33 +14,35 @@ export const Route = createFileRoute("/account/activity")({
 
 type ActionFilter = "all" | "create_person" | "update_person" | "delete_person" | "create_relationship" | "delete_relationship" | "merge_persons";
 
-const ACTION_LABELS: Record<ActionFilter, string> = {
-  all: "Toutes les actions",
-  create_person: "Fiches créées",
-  update_person: "Fiches modifiées",
-  delete_person: "Fiches supprimées",
-  create_relationship: "Liens ajoutés",
-  delete_relationship: "Liens supprimés",
-  merge_persons: "Fusions",
-};
+const ACTION_CHIPS: { value: ActionFilter; label: string; icon: React.ElementType }[] = [
+  { value: "all",                 label: "Tout",        icon: History  },
+  { value: "create_person",       label: "Créations",   icon: UserPlus },
+  { value: "update_person",       label: "Modifications", icon: Pencil },
+  { value: "delete_person",       label: "Suppressions", icon: Trash2  },
+  { value: "create_relationship", label: "Liens",       icon: Link2    },
+  { value: "delete_relationship", label: "Liens retirés", icon: Unlink },
+  { value: "merge_persons",       label: "Fusions",     icon: GitMerge },
+];
+
+const ACTION_LABELS: Record<ActionFilter, string> = Object.fromEntries(
+  ACTION_CHIPS.map((c) => [c.value, c.label])
+) as Record<ActionFilter, string>;
 
 function actionVisual(action: string) {
   switch (action) {
-    case "create_person":       return { icon: UserPlus, tone: "text-green-600",      bg: "bg-green-500/10",      badge: "bg-green-100 text-green-700" };
-    case "update_person":       return { icon: Pencil,   tone: "text-blue-600",       bg: "bg-blue-500/10",       badge: "bg-blue-100 text-blue-700" };
-    case "delete_person":       return { icon: Trash2,   tone: "text-destructive",    bg: "bg-destructive/10",    badge: "bg-red-100 text-red-700" };
-    case "create_relationship": return { icon: Link2,    tone: "text-green-600",      bg: "bg-green-500/10",      badge: "bg-green-100 text-green-700" };
-    case "delete_relationship": return { icon: Unlink,   tone: "text-destructive",    bg: "bg-destructive/10",    badge: "bg-red-100 text-red-700" };
-    case "merge_persons":       return { icon: GitMerge, tone: "text-amber-600",      bg: "bg-amber-500/10",      badge: "bg-amber-100 text-amber-700" };
-    default:                    return { icon: History,  tone: "text-muted-foreground", bg: "bg-muted",            badge: "bg-muted text-muted-foreground" };
+    case "create_person":       return { icon: UserPlus, tone: "text-green-600",       bg: "bg-green-500/10",    badge: "bg-green-100 text-green-700"   };
+    case "update_person":       return { icon: Pencil,   tone: "text-blue-600",        bg: "bg-blue-500/10",     badge: "bg-blue-100 text-blue-700"     };
+    case "delete_person":       return { icon: Trash2,   tone: "text-destructive",     bg: "bg-destructive/10",  badge: "bg-red-100 text-red-700"       };
+    case "create_relationship": return { icon: Link2,    tone: "text-green-600",       bg: "bg-green-500/10",    badge: "bg-green-100 text-green-700"   };
+    case "delete_relationship": return { icon: Unlink,   tone: "text-destructive",     bg: "bg-destructive/10",  badge: "bg-red-100 text-red-700"       };
+    case "merge_persons":       return { icon: GitMerge, tone: "text-amber-600",       bg: "bg-amber-500/10",    badge: "bg-amber-100 text-amber-700"   };
+    default:                    return { icon: History,  tone: "text-muted-foreground", bg: "bg-muted",           badge: "bg-muted text-muted-foreground" };
   }
 }
 
 function personName(d: Record<string, unknown> | null): string {
   if (!d) return "une fiche";
-  const f = (d.first_name as string) ?? "";
-  const l = (d.last_name as string) ?? "";
-  return `${f} ${l}`.trim() || "une fiche";
+  return `${(d.first_name as string) ?? ""} ${(d.last_name as string) ?? ""}`.trim() || "une fiche";
 }
 
 function relTypeLabel(t: string | undefined): string {
@@ -48,10 +50,10 @@ function relTypeLabel(t: string | undefined): string {
     case "parent":       return "parent";
     case "child":        return "enfant";
     case "spouse":       return "conjoint(e)";
-    case "sibling":      return "frère/sœur";
-    case "half_sibling": return "demi-frère/sœur";
-    case "step_sibling": return "frère/sœur par alliance";
-    default:             return t ?? "lien de parenté";
+    case "sibling":      return "frère / sœur";
+    case "half_sibling": return "demi-frère / sœur";
+    case "step_sibling": return "frère / sœur par alliance";
+    default:             return t ?? "parenté";
   }
 }
 
@@ -61,62 +63,36 @@ function describe(e: AuditEntry): { summary: string; detail: string | null } {
   switch (e.action) {
     case "create_person": {
       const name = personName(d);
-      const birth = d?.birth_year ? ` (né${d.birth_year})` : "";
-      return {
-        summary: `${who} a créé la fiche de ${name}`,
-        detail: d ? `${name}${birth}` : null,
-      };
+      return { summary: `${who} a créé la fiche de ${name}`, detail: null };
     }
     case "update_person": {
       const name = personName(d);
       const changed = d?.changed_fields as string[] | undefined;
       return {
         summary: `${who} a modifié la fiche de ${name}`,
-        detail: changed?.length ? `Champs modifiés : ${changed.join(", ")}` : null,
+        detail: changed?.length ? changed.join(", ") : null,
       };
     }
-    case "delete_person": {
-      const name = personName(d);
-      return {
-        summary: `${who} a supprimé la fiche de ${name}`,
-        detail: null,
-      };
-    }
+    case "delete_person":
+      return { summary: `${who} a supprimé la fiche de ${personName(d)}`, detail: null };
     case "create_relationship": {
       const a = (d?.person_a_name as string) ?? "?";
       const b = (d?.person_b_name as string) ?? "?";
-      const type = relTypeLabel(d?.type as string);
-      return {
-        summary: `${who} a relié ${a} et ${b}`,
-        detail: `Type : ${type}`,
-      };
+      return { summary: `${who} a relié ${a} et ${b}`, detail: relTypeLabel(d?.type as string) };
     }
     case "delete_relationship": {
       const a = (d?.person_a_name as string) ?? "?";
       const b = (d?.person_b_name as string) ?? "?";
-      const type = relTypeLabel(d?.type as string);
-      return {
-        summary: `${who} a supprimé le lien entre ${a} et ${b}`,
-        detail: `Type : ${type}`,
-      };
+      return { summary: `${who} a retiré le lien entre ${a} et ${b}`, detail: relTypeLabel(d?.type as string) };
     }
     case "merge_persons": {
       const src = (d?.source_name as string) ?? "une fiche";
       const tgt = (d?.target_name as string) ?? "une fiche";
-      return {
-        summary: `${who} a fusionné ${src} dans ${tgt}`,
-        detail: d?.merged_fields ? `Champs fusionnés : ${(d.merged_fields as string[]).join(", ")}` : null,
-      };
+      return { summary: `${who} a fusionné ${src} dans ${tgt}`, detail: null };
     }
     default:
-      return { summary: `${who} a effectué une action (${e.action})`, detail: null };
+      return { summary: `${who} — ${e.action}`, detail: null };
   }
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function timeAgo(iso: string): string {
@@ -125,18 +101,29 @@ function timeAgo(iso: string): string {
   const diff = Date.now() - then;
   const min = Math.floor(diff / 60000);
   if (min < 1) return "à l'instant";
-  if (min < 60) return `il y a ${min} min`;
+  if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
-  if (h < 24) return `il y a ${h} h`;
+  if (h < 24) return `${h} h`;
   const j = Math.floor(h / 24);
-  if (j < 7) return `il y a ${j} j`;
-  return formatDate(iso);
+  if (j < 7) return `${j} j`;
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+function formatDateLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Date inconnue";
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Aujourd'hui";
+  if (d.toDateString() === yesterday.toDateString()) return "Hier";
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function groupByDate(entries: AuditEntry[]): { label: string; items: AuditEntry[] }[] {
   const groups = new Map<string, AuditEntry[]>();
   for (const e of entries) {
-    const label = formatDate(e.createdAt) || "Date inconnue";
+    const label = formatDateLabel(e.createdAt);
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label)!.push(e);
   }
@@ -149,184 +136,179 @@ function ActivityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
-  const [actorFilter, setActorFilter] = useState<string>("all");
+  const [actorFilter, setActorFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     auditApi
       .myTree()
       .then(setEntries)
-      .catch(() => setError("Impossible de charger le journal d'activité."))
+      .catch(() => setError("Impossible de charger le journal."))
       .finally(() => setLoading(false));
   }, [isAuthenticated]);
 
   const actors = useMemo(() => {
     const names = new Set(entries.map((e) => e.actorName ?? "Quelqu'un"));
-    return ["all", ...Array.from(names).sort()];
+    return Array.from(names).sort();
   }, [entries]);
 
-  const filtered = useMemo(() => {
-    return entries.filter((e) => {
-      if (actionFilter !== "all" && e.action !== actionFilter) return false;
-      if (actorFilter !== "all" && (e.actorName ?? "Quelqu'un") !== actorFilter) return false;
-      if (search.trim()) {
-        const { summary, detail } = describe(e);
-        const q = search.toLowerCase();
-        if (!summary.toLowerCase().includes(q) && !(detail ?? "").toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-  }, [entries, actionFilter, actorFilter, search]);
+  const filtered = useMemo(() => entries.filter((e) => {
+    if (actionFilter !== "all" && e.action !== actionFilter) return false;
+    if (actorFilter !== "all" && (e.actorName ?? "Quelqu'un") !== actorFilter) return false;
+    if (search.trim()) {
+      const { summary, detail } = describe(e);
+      const q = search.toLowerCase();
+      if (!summary.toLowerCase().includes(q) && !(detail ?? "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }), [entries, actionFilter, actorFilter, search]);
 
   const grouped = useMemo(() => groupByDate(filtered), [filtered]);
-
-  const hasFilter = actionFilter !== "all" || actorFilter !== "all" || search.trim();
+  const hasFilter = actionFilter !== "all" || actorFilter !== "all" || !!search.trim();
 
   return (
-    <div className="canvas-grid min-h-screen bg-canvas p-4">
-      <div className="mx-auto max-w-xl space-y-4 pt-8">
-        <Link to="/account" className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+    <div className="canvas-grid min-h-screen bg-canvas">
+      <div className="mx-auto max-w-xl px-4 pb-8 pt-6">
+
+        {/* Back */}
+        <Link to="/account" className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="size-4" /> Retour au compte
         </Link>
 
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-float">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <History className="size-5 text-primary" />
-                <h1 className="font-serif text-2xl text-foreground">Activité de l'arbre</h1>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Toutes les modifications apportées à votre arbre généalogique.
-              </p>
+        {/* Header card */}
+        <div className="rounded-2xl border border-border bg-card shadow-float">
+
+          {/* Title row */}
+          <div className="flex items-center justify-between px-5 pt-5">
+            <div className="flex items-center gap-2">
+              <History className="size-5 text-primary" />
+              <h1 className="font-serif text-xl text-foreground">Activité de l'arbre</h1>
             </div>
-            {!loading && entries.length > 0 && (
-              <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                {filtered.length} / {entries.length}
+            {!loading && (
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {filtered.length}{entries.length !== filtered.length ? ` / ${entries.length}` : ""}
               </span>
             )}
           </div>
 
-          {/* Filters */}
+          {/* Filters — always visible, compact */}
           {!loading && entries.length > 0 && (
-            <div className="mt-4 space-y-2">
+            <div className="mt-3 space-y-2 px-5">
+
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Rechercher une fiche, un nom…"
-                  className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Rechercher…"
+                  className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
                 {search && (
-                  <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <X className="size-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* Advanced filters toggle */}
-              <button
-                onClick={() => setFilterOpen((o) => !o)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronDown className={`size-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-                Filtres avancés
-                {hasFilter && actionFilter !== "all" || actorFilter !== "all" ? (
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">actif</span>
-                ) : null}
-              </button>
+              {/* Action chips — horizontal scroll on mobile */}
+              <div className="-mx-5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 scrollbar-none">
+                {ACTION_CHIPS.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setActionFilter(value)}
+                    className={[
+                      "flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                      actionFilter === value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-secondary hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    <Icon className="size-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-              {filterOpen && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Type d'action</label>
-                    <select
-                      value={actionFilter}
-                      onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
-                      className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring"
+              {/* Member filter + reset — one row */}
+              {actors.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <User className="size-3.5 shrink-0 text-muted-foreground" />
+                  <select
+                    value={actorFilter}
+                    onChange={(e) => setActorFilter(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="all">Tous les membres</option>
+                    {actors.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                  {hasFilter && (
+                    <button
+                      onClick={() => { setActionFilter("all"); setActorFilter("all"); setSearch(""); }}
+                      className="shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
                     >
-                      {(Object.keys(ACTION_LABELS) as ActionFilter[]).map((k) => (
-                        <option key={k} value={k}>{ACTION_LABELS[k]}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Membre</label>
-                    <select
-                      value={actorFilter}
-                      onChange={(e) => setActorFilter(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="all">Tous les membres</option>
-                      {actors.filter((a) => a !== "all").map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </div>
+                      Réinitialiser
+                    </button>
+                  )}
                 </div>
               )}
-
-              {hasFilter && (
+              {actors.length <= 1 && hasFilter && (
                 <button
                   onClick={() => { setActionFilter("all"); setActorFilter("all"); setSearch(""); }}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
                 >
-                  <X className="size-3" /> Réinitialiser les filtres
+                  <X className="size-3" /> Réinitialiser
                 </button>
               )}
             </div>
           )}
 
-          <div className="mt-5">
+          {/* Divider */}
+          <div className="mt-4 h-px bg-border" />
+
+          {/* Content */}
+          <div className="px-5 py-4">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center py-10">
                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
               </div>
             ) : error ? (
               <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
             ) : filtered.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                {entries.length === 0 ? "Aucune activité pour le moment." : "Aucun résultat pour ces filtres."}
+                {entries.length === 0 ? "Aucune activité pour le moment." : "Aucun résultat."}
               </p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {grouped.map(({ label, items }) => (
                   <div key={label}>
-                    {/* Date group header */}
                     <div className="mb-2 flex items-center gap-2">
-                      <Calendar className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+                      <Calendar className="size-3 shrink-0 text-muted-foreground" />
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
                       <div className="h-px flex-1 bg-border" />
                     </div>
 
-                    <ol className="space-y-1">
+                    <ol className="space-y-0.5">
                       {items.map((e) => {
                         const v = actionVisual(e.action);
                         const Icon = v.icon;
                         const { summary, detail } = describe(e);
                         return (
-                          <li key={e.id} className="flex items-start gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted/50">
-                            <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg ${v.bg} ${v.tone}`}>
-                              <Icon className="size-4" />
+                          <li key={e.id} className="flex items-start gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40">
+                            <span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg ${v.bg} ${v.tone}`}>
+                              <Icon className="size-3.5" />
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm text-foreground">{summary}</p>
+                              <p className="text-sm leading-snug text-foreground">{summary}</p>
                               {detail && (
                                 <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
                               )}
-                              <div className="mt-1 flex items-center gap-2">
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${v.badge}`}>
-                                  {ACTION_LABELS[e.action as ActionFilter] ?? e.action}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground">{timeAgo(e.createdAt)}</span>
-                              </div>
                             </div>
+                            <span className="mt-1 shrink-0 text-[11px] text-muted-foreground">{timeAgo(e.createdAt)}</span>
                           </li>
                         );
                       })}
