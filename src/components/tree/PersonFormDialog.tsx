@@ -4,6 +4,7 @@ import {
   Plus, UserPlus, Check, Upload, Mic, Square,
 } from "lucide-react";
 import { personsApi, relationshipsApi, mediaApi } from "@/lib/api";
+import { startVoiceRecording, VoiceRecorder } from "@/lib/recorder";
 import { useFamilyTreeStore } from "@/lib/store";
 import { Person, Relationship } from "@/lib/types";
 
@@ -84,46 +85,26 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   const audioRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSecs, setRecordingSecs] = useState(0);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorderRef = useRef<VoiceRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { timerRef.current && clearInterval(timerRef.current); }, []);
 
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Pick the best supported format — iOS Safari only supports mp4/aac
-      const preferredTypes = [
-        { mime: "audio/webm;codecs=opus", ext: "webm" },
-        { mime: "audio/webm", ext: "webm" },
-        { mime: "audio/ogg;codecs=opus", ext: "ogg" },
-        { mime: "audio/mp4", ext: "mp4" },
-      ];
-      const chosen = preferredTypes.find((t) =>
-        typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t.mime)
-      ) ?? { mime: "", ext: "audio" };
-
-      const mr = chosen.mime ? new MediaRecorder(stream, { mimeType: chosen.mime }) : new MediaRecorder(stream);
-      const actualMime = mr.mimeType || chosen.mime || "audio/mp4";
-      const ext = actualMime.startsWith("audio/webm") ? "webm"
-        : actualMime.startsWith("audio/ogg") ? "ogg"
-        : actualMime.startsWith("audio/mp4") ? "mp4"
-        : chosen.ext;
-
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: actualMime });
-        const file = new File([blob], `vocal-${Date.now()}.${ext}`, { type: actualMime.split(";")[0] });
-        setAudioFiles((ps) => [...ps, file]);
-        stream.getTracks().forEach((t) => t.stop());
-        setIsRecording(false);
-        setRecordingSecs(0);
-        timerRef.current && clearInterval(timerRef.current);
-      };
-      mr.start();
-      recorderRef.current = mr;
+      recorderRef.current = await startVoiceRecording(
+        (file) => {
+          setAudioFiles((ps) => [...ps, file]);
+          setIsRecording(false);
+          setRecordingSecs(0);
+          timerRef.current && clearInterval(timerRef.current);
+        },
+        () => {
+          setIsRecording(false);
+          timerRef.current && clearInterval(timerRef.current);
+          alert("Erreur pendant l'enregistrement.");
+        },
+      );
       setIsRecording(true);
       setRecordingSecs(0);
       timerRef.current = setInterval(() => setRecordingSecs((s) => s + 1), 1000);
@@ -216,8 +197,9 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
         pid = person.id;
       } else return;
 
-      for (const f of photoFiles) await mediaApi.upload(pid, "photo", f);
-      for (const f of audioFiles) await mediaApi.upload(pid, "audio", f);
+      // Upload direct navigateur → Cloudinary (ne transite pas par le backend).
+      for (const f of photoFiles) await mediaApi.uploadDirect(pid, "photo", f);
+      for (const f of audioFiles) await mediaApi.uploadDirect(pid, "audio", f);
 
       // Refresh tree so the person card data is up-to-date without a full reload.
       loadTree().catch(() => {});

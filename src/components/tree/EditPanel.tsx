@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Person, Relationship } from "@/lib/types";
 import { X, Calendar, MapPin, Music, ImageIcon, Pencil, Lock, Unlink, Plus, UserCheck, Trash2, Loader2, Upload, Mic, Square, UserPlus } from "lucide-react";
 import { relationshipsApi, personsApi, mediaApi } from "@/lib/api";
+import { startVoiceRecording, VoiceRecorder } from "@/lib/recorder";
 import { useFamilyTreeStore } from "@/lib/store";
 import { PersonSearchSelect } from "./PersonSearchSelect";
 import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
@@ -258,10 +259,11 @@ export function EditPanel({
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [photoProgress, setPhotoProgress] = useState(0);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
 
   if (!person) return null;
 
@@ -366,13 +368,15 @@ export function EditPanel({
     const file = e.target.files?.[0];
     if (!file || !person) return;
     setUploadingPhoto(true);
+    setPhotoProgress(0);
     try {
-      const media = await mediaApi.upload(person.id, "photo", file);
+      const media = await mediaApi.uploadDirect(person.id, "photo", file, setPhotoProgress);
       updatePerson(person.id, { photos: [...person.photos, media] });
     } catch {
       alert("Échec de l'envoi de la photo.");
     } finally {
       setUploadingPhoto(false);
+      setPhotoProgress(0);
       if (photoInputRef.current) photoInputRef.current.value = "";
     }
   }
@@ -398,40 +402,40 @@ export function EditPanel({
     const file = e.target.files?.[0];
     if (!file || !person) return;
     setUploadingAudio(true);
+    setAudioProgress(0);
     try {
-      const media = await mediaApi.upload(person.id, "audio", file);
+      const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
       updatePerson(person.id, { audios: [...person.audios, media] });
     } catch {
       alert("Échec de l'envoi de l'audio.");
     } finally {
       setUploadingAudio(false);
+      setAudioProgress(0);
       if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  }
+
+  async function uploadRecordedAudio(file: File) {
+    if (!person) return;
+    setUploadingAudio(true);
+    setAudioProgress(0);
+    try {
+      const media = await mediaApi.uploadDirect(person.id, "audio", file, setAudioProgress);
+      updatePerson(person.id, { audios: [...person.audios, media] });
+    } catch {
+      alert("Échec de l'envoi de l'enregistrement.");
+    } finally {
+      setUploadingAudio(false);
+      setAudioProgress(0);
     }
   }
 
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], "enregistrement.webm", { type: "audio/webm" });
-        if (!person) return;
-        setUploadingAudio(true);
-        try {
-          const media = await mediaApi.upload(person.id, "audio", file);
-          updatePerson(person.id, { audios: [...person.audios, media] });
-        } catch {
-          alert("Échec de l'envoi de l'enregistrement.");
-        } finally {
-          setUploadingAudio(false);
-        }
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
+      voiceRecorderRef.current = await startVoiceRecording(
+        (file) => { setRecording(false); uploadRecordedAudio(file); },
+        () => { setRecording(false); alert("Erreur pendant l'enregistrement."); },
+      );
       setRecording(true);
     } catch {
       alert("Impossible d'accéder au microphone.");
@@ -439,9 +443,8 @@ export function EditPanel({
   }
 
   function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    mediaRecorderRef.current = null;
-    setRecording(false);
+    voiceRecorderRef.current?.stop();
+    voiceRecorderRef.current = null;
   }
 
   // Personnes déjà liées + soi-même : à exclure du typeahead de liaison.
@@ -568,7 +571,7 @@ export function EditPanel({
                       className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
                     >
                       {uploadingPhoto ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
-                      Ajouter
+                      {uploadingPhoto ? `${Math.round(photoProgress * 100)}%` : "Ajouter"}
                     </button>
                   </>
                 )}
@@ -610,6 +613,7 @@ export function EditPanel({
                       className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
                     >
                       {uploadingAudio ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
+                      {uploadingAudio ? `${Math.round(audioProgress * 100)}%` : ""}
                     </button>
                     <button
                       onClick={recording ? stopRecording : startRecording}

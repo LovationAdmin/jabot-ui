@@ -1,6 +1,7 @@
 import axios from "axios";
 import { FamilyTree, MediaFile, Person, Relationship, SearchResult } from "./types";
 import { apiBaseUrl } from "./config";
+import { uploadToCloudinary, CloudinarySignature } from "./cloudinaryUpload";
 
 const apiClient = axios.create({
   baseURL: apiBaseUrl(),
@@ -319,6 +320,32 @@ export const mediaApi = {
     const { data } = await apiClient.post<BackendMedia>("/media/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 120000,
+    });
+    return mapMedia(data);
+  },
+
+  /**
+   * Upload DIRECT navigateur → Cloudinary (recommandé, surtout pour l'audio).
+   * 1. demande une signature au backend (autorisation + quota),
+   * 2. envoie le fichier directement à Cloudinary (chunké si volumineux),
+   * 3. confirme au backend qui vérifie l'asset et enregistre les métadonnées.
+   * `onProgress` reçoit une fraction 0–1.
+   */
+  uploadDirect: async (
+    personId: string,
+    mediaType: "photo" | "audio",
+    file: File | Blob,
+    onProgress?: (fraction: number) => void,
+  ): Promise<MediaFile> => {
+    const { data: sign } = await apiClient.post<CloudinarySignature>("/media/sign", {
+      person_id: personId,
+      media_type: mediaType,
+    });
+    const result = await uploadToCloudinary(file, sign, onProgress);
+    const { data } = await apiClient.post<BackendMedia>("/media", {
+      person_id: personId,
+      media_type: mediaType,
+      public_id: result.public_id,
     });
     return mapMedia(data);
   },
