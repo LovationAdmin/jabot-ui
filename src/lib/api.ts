@@ -5,6 +5,10 @@ import { apiBaseUrl } from "./config";
 const apiClient = axios.create({
   baseURL: apiBaseUrl(),
   headers: { "Content-Type": "application/json" },
+  // Sans timeout, une requête qui n'aboutit jamais (backend dont l'event loop
+  // est bloqué) laisse le spinner tourner indéfiniment. Avec un timeout, l'appel
+  // échoue proprement et la logique de retry/erreur peut s'enclencher.
+  timeout: 20000,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -310,7 +314,12 @@ export const mediaApi = {
     formData.append("person_id", personId);
     formData.append("media_type", mediaType);
     formData.append("file", file);
-    const { data } = await apiClient.post<BackendMedia>("/media/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
+    // Upload (surtout audio jusqu'à 50 Mo sur mobile) : timeout généreux, le
+    // défaut de 20s couperait les gros fichiers sur connexion lente.
+    const { data } = await apiClient.post<BackendMedia>("/media/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
     return mapMedia(data);
   },
 
