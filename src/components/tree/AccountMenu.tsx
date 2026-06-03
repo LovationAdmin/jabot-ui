@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { User, LogOut, IdCard, ChevronDown, UserPlus, History } from "lucide-react";
+import { User, LogOut, IdCard, ChevronDown, UserPlus, History, TreePine, Check } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
 interface Props {
@@ -9,8 +9,8 @@ interface Props {
 }
 
 export function AccountMenu({ onEditMyCard, onInvite }: Props) {
-  const { phone, personId, firstName: storedFirstName, logout } = useAuthStore();
-  const { getPersonById } = useFamilyTreeStore();
+  const { phone, personId, firstName: storedFirstName, logout, treeAccesses, activeTreeId, setActiveTree } = useAuthStore();
+  const { getPersonById, loadTree } = useFamilyTreeStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -22,10 +22,18 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  // Préférer la fiche du store, sinon le prénom mémorisé lors de l'onboarding.
   const me = personId ? getPersonById(personId) : undefined;
   const displayName = me?.firstName ?? storedFirstName;
   const initial = (displayName?.[0] ?? phone?.slice(-2, -1) ?? "?").toUpperCase();
+
+  const activeTree = treeAccesses.find((t) => t.treeId === activeTreeId);
+  const hasMultipleTrees = treeAccesses.length > 1;
+
+  async function switchTree(treeId: string) {
+    setActiveTree(treeId);
+    setOpen(false);
+    await loadTree();
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -41,14 +49,43 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 z-50 w-56 overflow-hidden rounded-xl border border-border bg-card shadow-float">
+        <div className="absolute right-0 top-10 z-50 w-60 overflow-hidden rounded-xl border border-border bg-card shadow-float">
           <div className="border-b border-border px-4 py-3">
             <p className="text-sm font-medium text-foreground">
               {me ? `${me.firstName} ${me.lastName}`.trim() : (displayName ?? "Mon compte")}
             </p>
             <p className="text-xs text-muted-foreground">{phone}</p>
           </div>
+
+          {/* Tree switcher — shown when user has access to multiple trees */}
+          {hasMultipleTrees && (
+            <div className="border-b border-border px-2 py-2">
+              <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mes arbres</p>
+              {treeAccesses.map((t) => (
+                <button
+                  key={t.treeId}
+                  onClick={() => switchTree(t.treeId)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  <TreePine className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-left">{t.treeName}</span>
+                  <span className="text-[10px] text-muted-foreground capitalize">{t.role}</span>
+                  {t.treeId === activeTreeId && <Check className="size-3.5 shrink-0 text-primary" />}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="p-1">
+            {/* Active tree indicator when only one tree */}
+            {!hasMultipleTrees && activeTree && (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                <TreePine className="size-3.5" />
+                <span className="truncate">{activeTree.treeName}</span>
+                <span className="capitalize">· {activeTree.role}</span>
+              </div>
+            )}
+
             {personId && (
               <button
                 onClick={() => { setOpen(false); onEditMyCard?.(); }}

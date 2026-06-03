@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
-import { authApi, personsApi, relationshipsApi, mergeApi } from "@/lib/api";
+import { Search, UserCheck, UserPlus, Loader2, Sparkles, ChevronRight, ChevronLeft, Users, TreePine } from "lucide-react";
+import { authApi, personsApi, relationshipsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
-import { Person, SearchResult, Relationship } from "@/lib/types";
+import { Person, Relationship, OnboardMatch } from "@/lib/types";
 
 type Step = "identity" | "origins" | "results";
 
@@ -18,7 +18,6 @@ interface Props {
   onCompleted?: (personId: string) => void;
 }
 
-// Parse "Mamadou Diallo, Fatou Sow" → [{ firstName, lastName }]
 function parseNames(raw: string): Array<{ firstName: string; lastName: string }> {
   return raw
     .split(",")
@@ -28,23 +27,6 @@ function parseNames(raw: string): Array<{ firstName: string; lastName: string }>
       const parts = s.split(" ");
       return { firstName: parts[0] ?? s, lastName: parts.slice(1).join(" ") };
     });
-}
-
-// Un vrai doublon ne se limite pas au nom : on exige des signaux concordants
-// supplementaires (date de naissance identique et/ou parents en commun), que
-// le moteur de recherche backend remonte deja dans matchReasons.
-function isLikelyDuplicate(r: SearchResult): boolean {
-  const reasons = r.matchReasons.map((s) => s.toLowerCase());
-  const sameBirth = reasons.some((s) => s.includes("naissance") || s.includes("birth") || s.includes("date"));
-  const sharedParent = reasons.some((s) => s.includes("parent") || s.includes("pere") || s.includes("père") || s.includes("mere") || s.includes("mère"));
-  const nameMatch = reasons.some((s) => s.includes("nom") || s.includes("prenom") || s.includes("prénom") || s.includes("name"));
-
-  // Doublon certain : tres forte confiance ET au moins un signal fort
-  // (date de naissance ou parent commun) en plus du nom.
-  if (r.confidence >= 0.85 && (sameBirth || sharedParent)) return true;
-  // Sinon confiance quasi parfaite avec concordance nom + date + parent.
-  if (r.confidence >= 0.95 && nameMatch && sameBirth && sharedParent) return true;
-  return false;
 }
 
 export function OnboardingDialog({ onCompleted }: Props) {
@@ -62,7 +44,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
     parentNames: "",
     siblingNames: "",
   });
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [onboardMatches, setOnboardMatches] = useState<OnboardMatch[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +62,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
     setError(null);
     try {
       const fullName = `${form.firstName} ${form.lastName}`.trim();
-      const matches = await personsApi.search({
+      const matches = await authApi.onboardSearch({
         name: fullName || undefined,
         nickname: form.nickname.trim() || undefined,
         birth_date: form.birthDate || undefined,
@@ -88,92 +70,63 @@ export function OnboardingDialog({ onCompleted }: Props) {
         sibling_names: splitList(form.siblingNames),
         city_of_origin: form.cityOfOrigin.trim() || undefined,
       });
-      setResults(matches);
+      setOnboardMatches(matches);
       goTo("results", "forward");
     } catch {
-      setResults([]);
+      setOnboardMatches([]);
       goTo("results", "forward");
     } finally {
       setBusy(false);
     }
   }
 
-  // Crée les fiches des proches saisis et déduit TOUS les liens de parenté,
-  // pas seulement ceux de la fiche principale :
-  //   - chaque parent EST parent de l'utilisateur (parent → user)
-  //   - les parents sont conjoints entre eux (spouse) si ≥ 2 parents
-  //   - chaque parent EST aussi parent de chaque frère/sœur (parent → sibling)
-  //   - l'utilisateur et chaque frère/sœur sont frères/sœurs (sibling)
-  //   - les frères/sœurs sont frères/sœurs entre eux (sibling)
   async function linkRelatives(mainPersonId: string) {
     const parentIds: string[] = [];
     const siblingIds: string[] = [];
 
-    // Créer les parents
     for (const { firstName, lastName } of parseNames(form.parentNames)) {
       try {
         const parent = await personsApi.create({ firstName, lastName: lastName || undefined });
         addPerson(parent);
         parentIds.push(parent.id);
-      } catch { /* silencieux */ }
+      } catch { /* silent */ }
     }
 
-    // Créer la fratrie
     for (const { firstName, lastName } of parseNames(form.siblingNames)) {
       try {
         const sibling = await personsApi.create({ firstName, lastName: lastName || undefined });
         addPerson(sibling);
         siblingIds.push(sibling.id);
-      } catch { /* silencieux */ }
+      } catch { /* silent */ }
     }
 
     const link = async (personAId: string, personBId: string, type: string) => {
       try {
         const rel = await relationshipsApi.create({ personAId, personBId, type: type as Relationship["type"] });
         addRelationship(rel);
-      } catch { /* silencieux : la relation existe peut-être déjà */ }
+      } catch { /* may already exist */ }
     };
 
-    // parent → user (type "parent" : person_a est le parent de person_b)
     for (const pid of parentIds) await link(pid, mainPersonId, "parent");
-
-    // parents conjoints entre eux
-    for (let i = 0; i < parentIds.length; i++) {
-      for (let j = i + 1; j < parentIds.length; j++) {
+    for (let i = 0; i < parentIds.length; i++)
+      for (let j = i + 1; j < parentIds.length; j++)
         await link(parentIds[i], parentIds[j], "spouse");
-      }
-    }
-
-    // chaque parent → chaque frère/sœur (ils partagent les mêmes parents)
-    for (const pid of parentIds) {
+    for (const pid of parentIds)
       for (const sid of siblingIds) await link(pid, sid, "parent");
-    }
-
-    // user ↔ chaque frère/sœur
     for (const sid of siblingIds) await link(mainPersonId, sid, "sibling");
-
-    // frères/sœurs entre eux
-    for (let i = 0; i < siblingIds.length; i++) {
-      for (let j = i + 1; j < siblingIds.length; j++) {
+    for (let i = 0; i < siblingIds.length; i++)
+      for (let j = i + 1; j < siblingIds.length; j++)
         await link(siblingIds[i], siblingIds[j], "sibling");
-      }
-    }
   }
 
-  async function handleLink(personId: string) {
+  async function handleLink(match: OnboardMatch) {
     setBusy(true);
     setError(null);
     try {
-      // 1. Rattacher le compte à la fiche existante
-      const me = await authApi.linkPerson(personId);
-      // Basculer sur l'arbre de cette fiche AVANT toute écriture (les liens
-      // ci-dessous sont scopés sur l'arbre actif via le header X-Tree-ID).
+      const me = await authApi.linkPerson(match.person_id, match.tree_id);
       if (me.activeTreeId) setActiveTree(me.activeTreeId);
       setTreeAccesses(me.treeAccesses, me.activeTreeId);
-      const linked = results.find((r) => r.person.id === personId)?.person;
 
-      // 2. Enrichir la fiche cible avec les données fraîchement saisies
-      //    (les données du formulaire priment sur les champs vides)
       const patch: Partial<Person> = {};
       if (form.firstName.trim()) patch.firstName = form.firstName.trim();
       if (form.lastName.trim()) patch.lastName = form.lastName.trim();
@@ -181,28 +134,15 @@ export function OnboardingDialog({ onCompleted }: Props) {
       if (form.birthDate) patch.birthDate = form.birthDate;
       if (form.cityOfOrigin.trim()) patch.cityOfOrigin = form.cityOfOrigin.trim();
       if (Object.keys(patch).length > 0) {
-        try { await personsApi.update(personId, patch); } catch { /* silencieux */ }
+        try { await personsApi.update(match.person_id, patch); } catch { /* silent */ }
       }
 
-      // 3. Créer parents + fratrie et déduire tous les liens (cf. linkRelatives)
-      await linkRelatives(personId);
+      await linkRelatives(match.person_id);
 
-      if (me.personId) {
-        setOnboarded(me.personId, form.firstName.trim() || linked?.firstName);
-      }
-
-      // 4. Fusionner automatiquement les vrais doublons dans la fiche choisie
-      //    (aucun tri manuel : un doublon = même personne selon nom + date de
-      //    naissance + parents, voir isLikelyDuplicate).
-      const duplicates = results.filter(
-        (r) => r.person.id !== personId && isLikelyDuplicate(r),
-      );
-      for (const dup of duplicates) {
-        try { await mergeApi.merge(dup.person.id, personId); } catch { /* silencieux */ }
-      }
+      if (me.personId) setOnboarded(me.personId, form.firstName.trim() || match.first_name);
 
       await loadTree();
-      onCompleted?.(personId);
+      onCompleted?.(match.person_id);
     } catch {
       setError("Impossible de vous rattacher a cette fiche. Reessayez.");
     } finally {
@@ -214,7 +154,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
     setBusy(true);
     setError(null);
     try {
-      // 1. Créer la fiche du user
       const created = await authApi.onboard({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim() || undefined,
@@ -222,22 +161,17 @@ export function OnboardingDialog({ onCompleted }: Props) {
         birthDate: form.birthDate || undefined,
         cityOfOrigin: form.cityOfOrigin.trim() || undefined,
       });
-      // L'onboard sans tree_id crée un NOUVEL arbre : on bascule dessus AVANT
-      // de créer les proches (sinon ils seraient écrits dans le mauvais arbre).
       if (created.familyTreeId) setActiveTree(created.familyTreeId);
       addPerson(created);
       setOnboarded(created.id, created.firstName);
 
-      // 2. Créer parents + fratrie et déduire tous les liens (cf. linkRelatives)
       await linkRelatives(created.id);
-
-      // 4. Recharger l'arbre complet pour récupérer la mise en page calculée
-      //    par le backend (sinon tous les proches restent empilés en (0,0) et
-      //    seul le dernier est visible sur le canvas).
       await loadTree();
 
-      // Rafraîchit la liste des arbres (pour le sélecteur d'arbres, Phase 3).
-      try { const me = await authApi.me(); setTreeAccesses(me.treeAccesses, created.familyTreeId); } catch { /* non bloquant */ }
+      try {
+        const me = await authApi.me();
+        setTreeAccesses(me.treeAccesses, created.familyTreeId ?? me.activeTreeId);
+      } catch { /* non blocking */ }
 
       onCompleted?.(created.id);
     } catch {
@@ -268,7 +202,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
             <h2 className="font-semibold leading-tight text-foreground">Bienvenue sur Jabot</h2>
             <p className="text-xs text-muted-foreground">{STEP_LABELS[step]}</p>
           </div>
-          {/* Progress dots */}
           <div className="flex gap-1.5">
             {STEPS.map((s, i) => (
               <div
@@ -305,22 +238,18 @@ export function OnboardingDialog({ onCompleted }: Props) {
                       className={inputCls}
                     />
                   </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Nom de famille</label>
                     <input value={form.lastName} onChange={(e) => field("lastName", e.target.value)} placeholder="Diallo" className={inputCls} />
                   </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Surnom / petit nom</label>
                     <input value={form.nickname} onChange={(e) => field("nickname", e.target.value)} placeholder="Ami" className={inputCls} />
                   </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Date de naissance</label>
                     <input type="date" value={form.birthDate} onChange={(e) => field("birthDate", e.target.value)} className={inputCls} />
                   </div>
-
                 </div>
 
                 <button
@@ -345,7 +274,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     <label className="text-xs font-medium text-muted-foreground">Ville ou region d'origine</label>
                     <input value={form.cityOfOrigin} onChange={(e) => field("cityOfOrigin", e.target.value)} placeholder="Dakar, Thies, Ziguinchor..." className={inputCls} />
                   </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Noms de vos parents{" "}
@@ -363,7 +291,6 @@ export function OnboardingDialog({ onCompleted }: Props) {
                       </p>
                     )}
                   </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Noms de vos freres et soeurs{" "}
@@ -400,7 +327,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                   >
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-                    Rechercher dans l'arbre
+                    Rechercher dans les arbres
                   </button>
                 </div>
               </>
@@ -409,29 +336,55 @@ export function OnboardingDialog({ onCompleted }: Props) {
             {/* ── Step 3 : Results ──────────────────────────────── */}
             {step === "results" && (
               <>
-                {results.length > 0 ? (
+                {onboardMatches.length > 0 ? (
                   <>
                     <p className="text-sm font-medium text-foreground">
-                      {results.length} profil{results.length > 1 ? "s" : ""} trouve{results.length > 1 ? "s" : ""} — vous reconnaissez-vous ?
+                      {onboardMatches.length} correspondance{onboardMatches.length > 1 ? "s" : ""} trouvee{onboardMatches.length > 1 ? "s" : ""} — vous reconnaissez-vous ?
                     </p>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {results.map((r) => (
-                        <div key={r.person.id} className="flex items-center justify-between rounded-xl border border-border bg-background p-3 gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {r.person.firstName} {r.person.lastName}
-                              <span className="ml-2 text-xs text-primary font-normal">{Math.round(r.confidence * 100)}%</span>
-                            </p>
-                            {r.matchReasons.length > 0 && (
-                              <p className="truncate text-xs text-muted-foreground">{r.matchReasons.join(" · ")}</p>
-                            )}
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {onboardMatches.map((m) => (
+                        <div key={m.person_id} className="rounded-xl border border-border bg-background p-3 space-y-2">
+                          {/* Tree badge */}
+                          <div className="flex items-center gap-1.5">
+                            <TreePine className="size-3 text-primary" />
+                            <span className="text-[11px] font-medium text-primary truncate">{m.tree_name}</span>
+                            <span className="ml-auto text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}%</span>
                           </div>
+
+                          {/* Person name */}
+                          <p className="text-sm font-semibold text-foreground">
+                            {m.first_name} {m.last_name ?? ""}
+                            {m.birth_date && (
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                {new Date(m.birth_date).getFullYear()}
+                              </span>
+                            )}
+                          </p>
+
+                          {/* Family context */}
+                          {(m.parents.length > 0 || m.siblings.length > 0) && (
+                            <div className="space-y-0.5">
+                              {m.parents.length > 0 && (
+                                <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                                  <Users className="size-3 mt-0.5 shrink-0" />
+                                  <span>Parents : {m.parents.map(p => `${p.first_name}${p.last_name ? " " + p.last_name : ""}`).join(", ")}</span>
+                                </div>
+                              )}
+                              {m.siblings.length > 0 && (
+                                <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                                  <Users className="size-3 mt-0.5 shrink-0" />
+                                  <span>Fratrie : {m.siblings.map(s => `${s.first_name}${s.last_name ? " " + s.last_name : ""}`).join(", ")}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           <button
-                            onClick={() => handleLink(r.person.id)}
+                            onClick={() => handleLink(m)}
                             disabled={busy}
-                            className="shrink-0 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                           >
-                            <UserCheck className="size-3.5" /> C'est moi
+                            <UserCheck className="size-3.5" /> C'est moi — rejoindre cet arbre
                           </button>
                         </div>
                       ))}
@@ -439,7 +392,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Aucun profil correspondant dans l'arbre pour l'instant.
+                    Aucun profil correspondant dans les arbres pour l'instant.
                   </p>
                 )}
 
@@ -460,7 +413,7 @@ export function OnboardingDialog({ onCompleted }: Props) {
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary bg-primary/5 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                   >
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
-                    {results.length > 0 ? "Aucun, creer ma fiche" : "Creer ma fiche"}
+                    {onboardMatches.length > 0 ? "Aucun, creer ma fiche" : "Creer ma fiche"}
                   </button>
                   <button
                     onClick={() => goTo("origins", "back")}

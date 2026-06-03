@@ -59,6 +59,23 @@ export interface SearchResult {
   matchReasons: string[];
 }
 
+export interface MatchRelative {
+  first_name: string;
+  last_name?: string;
+}
+
+export interface OnboardMatch {
+  tree_id: string;
+  tree_name: string;
+  person_id: string;
+  first_name: string;
+  last_name?: string;
+  birth_date?: string;
+  confidence: number;
+  parents: MatchRelative[];
+  siblings: MatchRelative[];
+}
+
 export interface PersonFormData {
   firstName: string;
   lastName: string;

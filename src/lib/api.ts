@@ -218,6 +218,18 @@ export const authApi = {
   deleteAccount: async (): Promise<void> => {
     await apiClient.delete("/auth/me");
   },
+
+  onboardSearch: async (params: {
+    name?: string;
+    nickname?: string;
+    birth_date?: string;
+    parent_names?: string[];
+    sibling_names?: string[];
+    city_of_origin?: string;
+  }): Promise<OnboardMatch[]> => {
+    const { data } = await apiClient.post<{ matches: OnboardMatch[] }>("/auth/onboard-search", params);
+    return data.matches ?? [];
+  },
 };
 
 // ─── Trees (multi-tenant) ──────────────────────────────────────────
