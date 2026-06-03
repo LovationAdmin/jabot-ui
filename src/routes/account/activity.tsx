@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, UserPlus, Pencil, Trash2, Link2, Unlink, GitMerge,
-  History, Loader2, Search, X, Calendar, User,
+  History, Loader2, Search, X, Calendar, User, Copy,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { auditApi, AuditEntry } from "@/lib/api";
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/account/activity")({
   component: ActivityPage,
 });
 
-type ActionFilter = "all" | "create_person" | "update_person" | "delete_person" | "create_relationship" | "delete_relationship" | "merge_persons";
+type ActionFilter = "all" | "create_person" | "update_person" | "delete_person" | "create_relationship" | "delete_relationship" | "merge_persons" | "ignore_duplicate";
 
 const ACTION_CHIPS: { value: ActionFilter; label: string; icon: React.ElementType }[] = [
   { value: "all",                 label: "Tout",        icon: History  },
@@ -22,6 +22,7 @@ const ACTION_CHIPS: { value: ActionFilter; label: string; icon: React.ElementTyp
   { value: "create_relationship", label: "Liens",       icon: Link2    },
   { value: "delete_relationship", label: "Liens retirés", icon: Unlink },
   { value: "merge_persons",       label: "Fusions",     icon: GitMerge },
+  { value: "ignore_duplicate",    label: "Doublons",    icon: Copy     },
 ];
 
 const ACTION_LABELS: Record<ActionFilter, string> = Object.fromEntries(
@@ -36,6 +37,8 @@ function actionVisual(action: string) {
     case "create_relationship": return { icon: Link2,    tone: "text-green-600",       bg: "bg-green-500/10",    badge: "bg-green-100 text-green-700"   };
     case "delete_relationship": return { icon: Unlink,   tone: "text-destructive",     bg: "bg-destructive/10",  badge: "bg-red-100 text-red-700"       };
     case "merge_persons":       return { icon: GitMerge, tone: "text-amber-600",       bg: "bg-amber-500/10",    badge: "bg-amber-100 text-amber-700"   };
+    case "ignore_duplicate":    return { icon: Copy,     tone: "text-amber-600",       bg: "bg-amber-500/10",    badge: "bg-amber-100 text-amber-700"   };
+    case "unignore_duplicate":  return { icon: Copy,     tone: "text-muted-foreground", bg: "bg-muted",           badge: "bg-muted text-muted-foreground" };
     default:                    return { icon: History,  tone: "text-muted-foreground", bg: "bg-muted",           badge: "bg-muted text-muted-foreground" };
   }
 }
@@ -89,6 +92,16 @@ function describe(e: AuditEntry): { summary: string; detail: string | null } {
       const src = (d?.source_name as string) ?? "une fiche";
       const tgt = (d?.target_name as string) ?? "une fiche";
       return { summary: `${who} a fusionné ${src} dans ${tgt}`, detail: null };
+    }
+    case "ignore_duplicate": {
+      const a = (d?.person_a_name as string) ?? "?";
+      const b = (d?.person_b_name as string) ?? "?";
+      return { summary: `${who} a marqué ${a} et ${b} comme « pas un doublon »`, detail: null };
+    }
+    case "unignore_duplicate": {
+      const a = (d?.person_a_name as string) ?? "?";
+      const b = (d?.person_b_name as string) ?? "?";
+      return { summary: `${who} a remis ${a} et ${b} à examiner comme doublon`, detail: null };
     }
     default:
       return { summary: `${who} — ${e.action}`, detail: null };
@@ -154,7 +167,14 @@ function ActivityPage() {
   }, [entries]);
 
   const filtered = useMemo(() => entries.filter((e) => {
-    if (actionFilter !== "all" && e.action !== actionFilter) return false;
+    if (actionFilter !== "all") {
+      // Le chip "Doublons" regroupe ignore + un-ignore.
+      const matches =
+        actionFilter === "ignore_duplicate"
+          ? e.action === "ignore_duplicate" || e.action === "unignore_duplicate"
+          : e.action === actionFilter;
+      if (!matches) return false;
+    }
     if (actorFilter !== "all" && (e.actorName ?? "Quelqu'un") !== actorFilter) return false;
     if (search.trim()) {
       const { summary, detail } = describe(e);
