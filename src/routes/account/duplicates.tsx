@@ -22,7 +22,7 @@ function PersonMini({ p }: { p: DuplicatePair["person_a"] }) {
 
 function DuplicatesPage() {
   const navigate = useNavigate();
-  const { loadTree } = useFamilyTreeStore();
+  const { loadTree, setDuplicateCount } = useFamilyTreeStore();
 
   const [pairs, setPairs] = useState<DuplicatePair[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +41,11 @@ function DuplicatesPage() {
   const visiblePairs = pairs.filter(
     (p) => !dismissed.has(`${p.person_a.id}-${p.person_b.id}`)
   );
+
+  // Garde la pastille (menu compte + alerte) alignee sur ce qui reste a examiner.
+  useEffect(() => {
+    if (!loading) setDuplicateCount(visiblePairs.length);
+  }, [visiblePairs.length, loading, setDuplicateCount]);
 
   async function handleMerge(pair: DuplicatePair) {
     const key = `${pair.person_a.id}-${pair.person_b.id}`;

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { Person, Relationship, AuthState, FamilyTree, TreeAccess } from "./types";
-import { treeApi, setActiveTreeId } from "./api";
+import { treeApi, duplicatesApi, setActiveTreeId } from "./api";
 
 // ─── Auth Store ────────────────────────────────────────────────────
 
@@ -101,7 +101,14 @@ interface FamilyTreeStore {
   selectedPersonId: string | null;
   fitPending: boolean;
 
+  // Nombre de doublons potentiels à examiner dans l'arbre actif (badge + alerte).
+  duplicateCount: number;
+  duplicatesDismissed: boolean;
+
   loadTree: () => Promise<void>;
+  refreshDuplicateCount: () => Promise<void>;
+  setDuplicateCount: (n: number) => void;
+  dismissDuplicates: () => void;
   addPerson: (person: Person) => void;
   updatePerson: (id: string, updates: Partial<Person>) => void;
   deletePerson: (id: string) => void;
@@ -120,6 +127,8 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
   error: null,
   selectedPersonId: null,
   fitPending: false,
+  duplicateCount: 0,
+  duplicatesDismissed: false,
 
   // Charge l'arbre avec plusieurs tentatives + backoff. Le plan gratuit Render
   // met le serveur en veille après inactivité : un cold start prend 30-60s.
@@ -152,6 +161,25 @@ export const useFamilyTreeStore = create<FamilyTreeStore>((set, get) => ({
       isWakingServer: false,
     }));
   },
+
+  // Recalcule le nombre de doublons potentiels via l'endpoint existant. Silencieux
+  // en cas d'echec (ex : visiteur sans droit d'ecriture → 403) : on remet 0.
+  // Toute remontee de doublons reactive l'alerte (dismiss remis a false).
+  refreshDuplicateCount: async () => {
+    try {
+      const pairs = await duplicatesApi.detect();
+      set((s) => ({
+        duplicateCount: pairs.length,
+        duplicatesDismissed: pairs.length === 0 ? false : s.duplicatesDismissed,
+      }));
+    } catch {
+      set({ duplicateCount: 0 });
+    }
+  },
+
+  setDuplicateCount: (n) => set({ duplicateCount: n }),
+
+  dismissDuplicates: () => set({ duplicatesDismissed: true }),
 
   addPerson: (person) => set((s) => ({ tree: { ...s.tree, persons: [...s.tree.persons, person] } })),
 

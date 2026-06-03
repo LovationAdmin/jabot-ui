@@ -1,5 +1,5 @@
 import axios from "axios";
-import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess } from "./types";
+import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess, OnboardMatch } from "./types";
 import { apiBaseUrl } from "./config";
 import { uploadToCloudinary, compressImage, CloudinarySignature } from "./cloudinaryUpload";
 

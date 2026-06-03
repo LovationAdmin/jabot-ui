@@ -14,7 +14,7 @@ import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
  */
 export function ConvergeBanner() {
   const { treeAccesses, activeTreeId, personId, setActiveTree, setTreeAccesses } = useAuthStore();
-  const { tree, loadTree } = useFamilyTreeStore();
+  const { tree, loadTree, refreshDuplicateCount } = useFamilyTreeStore();
 
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -54,6 +54,9 @@ export function ConvergeBanner() {
       setTreeAccesses(me.treeAccesses, activeTreeId);
       setActiveTree(activeTreeId);
       await loadTree();
+      // La convergence cree souvent des doublons (memes proches dans les 2 arbres) :
+      // on rafraichit le compteur pour declencher l'alerte d'examen.
+      await refreshDuplicateCount();
       setOpen(false);
       setDismissed(true);
     } catch (e: unknown) {

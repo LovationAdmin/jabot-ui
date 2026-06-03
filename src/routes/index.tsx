@@ -11,6 +11,7 @@ import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { ExportDialog } from "@/components/tree/ExportDialog";
 import { InviteManager } from "@/components/tree/InviteManager";
 import { ConvergeBanner } from "@/components/tree/ConvergeBanner";
+import { DuplicateAlert } from "@/components/tree/DuplicateAlert";
 import { TreeTabs } from "@/components/tree/TreeTabs";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
@@ -40,8 +41,8 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 
 function JabotCanvas() {
   const navigate = useNavigate();
-  const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson, fitPending, clearFitPending } = useFamilyTreeStore();
-  const { isAuthenticated, onboarded, personId, userId, logout } = useAuthStore();
+  const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson, fitPending, clearFitPending, refreshDuplicateCount } = useFamilyTreeStore();
+  const { isAuthenticated, onboarded, personId, userId, logout, activeTreeId } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
@@ -77,6 +78,14 @@ function JabotCanvas() {
   useEffect(() => {
     loadTree();
   }, [loadTree]);
+
+  // Recalcule le nombre de doublons a examiner apres chaque (re)chargement de
+  // l'arbre actif. Reserve aux utilisateurs rattaches (les visiteurs n'ont pas
+  // le droit de fusionner ; l'endpoint renverra 403 → compteur a 0).
+  useEffect(() => {
+    if (isAuthenticated && onboarded && !isLoading) refreshDuplicateCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, onboarded, isLoading, activeTreeId]);
 
   useEffect(() => {
     if (!fitPending) return;
@@ -421,6 +430,9 @@ function JabotCanvas() {
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
         {isAuthenticated && !searchOpen && <ConvergeBanner />}
+
+        {/* Alerte doublons a examiner (membre/proprietaire) */}
+        {isAuthenticated && !searchOpen && <DuplicateAlert />}
 
         {/* Banner visiteur */}
         {!isAuthenticated && tree.persons.length > 0 && !searchOpen && (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { User, LogOut, IdCard, ChevronDown, UserPlus, History, TreePine, Check } from "lucide-react";
+import { User, LogOut, IdCard, ChevronDown, UserPlus, History, TreePine, Check, Copy } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 
 export function AccountMenu({ onEditMyCard, onInvite }: Props) {
   const { phone, personId, firstName: storedFirstName, logout, treeAccesses, activeTreeId, setActiveTree } = useAuthStore();
-  const { getPersonById, loadTree } = useFamilyTreeStore();
+  const { getPersonById, loadTree, duplicateCount } = useFamilyTreeStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -39,13 +39,19 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground transition-colors hover:bg-muted"
+        className="relative flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground transition-colors hover:bg-muted"
       >
         <span className="grid size-5 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
           {initial}
         </span>
         <span className="hidden max-w-[8rem] truncate sm:block">{displayName ?? phone}</span>
         <ChevronDown className="size-3.5 text-muted-foreground" />
+        {/* Pastille : doublons a examiner */}
+        {duplicateCount > 0 && (
+          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-4 text-white">
+            {duplicateCount > 9 ? "9+" : duplicateCount}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -101,6 +107,19 @@ export function AccountMenu({ onEditMyCard, onInvite }: Props) {
               >
                 <UserPlus className="size-4 text-muted-foreground" /> Inviter un proche
               </button>
+            )}
+            {duplicateCount > 0 && (
+              <Link
+                to="/account/duplicates"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <Copy className="size-4 text-amber-600" />
+                <span className="flex-1 text-left">Doublons à examiner</span>
+                <span className="grid min-w-5 place-items-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">
+                  {duplicateCount}
+                </span>
+              </Link>
             )}
             <Link
               to="/account/activity"
