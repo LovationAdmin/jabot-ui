@@ -214,10 +214,10 @@ function DuplicatesPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b px-4 py-3 flex items-center gap-3">
         <button
-          onClick={() => navigate({ to: "/account" })}
-          className="p-2 rounded-lg hover:bg-muted transition-colors"
+          onClick={() => navigate({ to: "/" })}
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" /> Retour à l'arbre
         </button>
         <h1 className="font-semibold text-base">Doublons détectés</h1>
       </header>
