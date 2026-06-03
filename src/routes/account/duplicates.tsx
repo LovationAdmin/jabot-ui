@@ -1,41 +1,115 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, GitMerge, CheckCircle, AlertCircle, Loader2, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, GitMerge, CheckCircle, AlertCircle, Loader2, Users, Pencil, Layers } from "lucide-react";
 import { duplicatesApi, DuplicatePair } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
+import { buildPersonContext, PersonContext } from "@/lib/relatives";
+import { Person } from "@/lib/types";
+import { PersonFormDialog } from "@/components/tree/PersonFormDialog";
 
 export const Route = createFileRoute("/account/duplicates")({
   component: DuplicatesPage,
 });
 
-function PersonMini({ p }: { p: DuplicatePair["person_a"] }) {
-  const name = [p.first_name, p.last_name].filter(Boolean).join(" ");
-  const year = p.birth_date?.slice(0, 4);
+// ─── Carte personne enrichie (identite + contexte familial) ────────
+
+function ContextRow({ label, refs }: { label: string; refs: { id: string; name: string }[] }) {
+  if (refs.length === 0) return null;
   return (
-    <div className="rounded-xl border bg-card p-3 text-sm min-w-0 flex-1">
-      <p className="font-semibold truncate">{name}</p>
-      {year && <p className="text-muted-foreground text-xs">{year}</p>}
-      {p.gender && <p className="text-muted-foreground text-xs capitalize">{p.gender}</p>}
+    <p className="text-xs text-muted-foreground">
+      <span className="font-medium text-foreground/70">{label} :</span>{" "}
+      {refs.map((r) => r.name).join(", ")}
+    </p>
+  );
+}
+
+function PersonMini({
+  fallback,
+  person,
+  context,
+  onEdit,
+}: {
+  fallback: DuplicatePair["person_a"];
+  person?: Person;
+  context?: PersonContext;
+  onEdit?: () => void;
+}) {
+  const name = person
+    ? `${person.firstName} ${person.lastName ?? ""}`.trim()
+    : [fallback.first_name, fallback.last_name].filter(Boolean).join(" ");
+  const year = (person?.birthDate ?? fallback.birth_date)?.slice(0, 4);
+  const gender = person?.gender ?? fallback.gender;
+  const photo = person?.photos?.[0]?.url;
+
+  return (
+    <div className="rounded-xl border bg-card p-3 text-sm min-w-0 flex-1 space-y-1.5">
+      <div className="flex items-start gap-2">
+        {photo ? (
+          <img src={photo} alt="" className="size-9 shrink-0 rounded-lg object-cover" />
+        ) : (
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+            {(name[0] ?? "?").toUpperCase()}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold truncate">{name}</p>
+          <p className="text-muted-foreground text-xs">
+            {[year, gender && (gender === "male" ? "H" : gender === "female" ? "F" : "—")]
+              .filter(Boolean)
+              .join(" · ") || "Infos manquantes"}
+          </p>
+        </div>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="grid size-7 shrink-0 place-items-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Voir / modifier la fiche"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        )}
+      </div>
+
+      {context && (
+        <div className="space-y-0.5 pt-0.5">
+          {context.generation !== undefined && (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Layers className="size-3" /> Génération {context.generation}
+            </p>
+          )}
+          <ContextRow label="Parents" refs={context.parents} />
+          <ContextRow label="Fratrie" refs={context.siblings} />
+          <ContextRow label="Enfants" refs={context.children} />
+          <ContextRow label="Conjoint(s)" refs={context.spouses} />
+        </div>
+      )}
     </div>
   );
 }
 
 function DuplicatesPage() {
   const navigate = useNavigate();
-  const { loadTree, setDuplicateCount } = useFamilyTreeStore();
+  const { tree, loadTree, setDuplicateCount, getPersonById } = useFamilyTreeStore();
 
   const [pairs, setPairs] = useState<DuplicatePair[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [merging, setMerging] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<Person | null>(null);
 
-  useEffect(() => {
+  const refresh = () =>
     duplicatesApi
       .detect()
       .then(setPairs)
       .catch(() => setError("Impossible de charger les doublons."))
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    // L'arbre est necessaire pour afficher le contexte familial et editer une fiche.
+    if (tree.persons.length === 0) loadTree();
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visiblePairs = pairs.filter(
@@ -46,6 +120,15 @@ function DuplicatesPage() {
   useEffect(() => {
     if (!loading) setDuplicateCount(visiblePairs.length);
   }, [visiblePairs.length, loading, setDuplicateCount]);
+
+  // Contexte familial calcule a partir de l'arbre charge (sans appel reseau).
+  const contextFor = useMemo(() => {
+    const cache = new Map<string, PersonContext>();
+    return (id: string) => {
+      if (!cache.has(id)) cache.set(id, buildPersonContext(id, tree));
+      return cache.get(id)!;
+    };
+  }, [tree]);
 
   async function handleMerge(pair: DuplicatePair) {
     const key = `${pair.person_a.id}-${pair.person_b.id}`;
@@ -65,6 +148,15 @@ function DuplicatesPage() {
   function handleDismiss(pair: DuplicatePair) {
     const key = `${pair.person_a.id}-${pair.person_b.id}`;
     setDismissed((prev) => new Set([...prev, key]));
+  }
+
+  // A la fermeture de l'edition : recharge l'arbre puis recalcule les doublons
+  // (une fiche corrigee peut ne plus etre un doublon).
+  async function handleEditClose() {
+    setEditing(null);
+    await loadTree();
+    setLoading(true);
+    await refresh();
   }
 
   return (
@@ -102,9 +194,18 @@ function DuplicatesPage() {
           </div>
         )}
 
+        {!loading && visiblePairs.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Vérifie chaque paire : fusionne si c'est bien la même personne, ou modifie une fiche
+            (date de naissance, nom…) pour lever l'ambiguïté.
+          </p>
+        )}
+
         {visiblePairs.map((pair) => {
           const key = `${pair.person_a.id}-${pair.person_b.id}`;
           const isMerging = merging === key;
+          const personA = getPersonById(pair.person_a.id);
+          const personB = getPersonById(pair.person_b.id);
           return (
             <div key={key} className="rounded-2xl border bg-card p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -119,10 +220,20 @@ function DuplicatesPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <PersonMini p={pair.person_a} />
-                <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-                <PersonMini p={pair.person_b} />
+              <div className="flex items-start gap-3">
+                <PersonMini
+                  fallback={pair.person_a}
+                  person={personA}
+                  context={personA ? contextFor(personA.id) : undefined}
+                  onEdit={personA ? () => setEditing(personA) : undefined}
+                />
+                <Users className="w-4 h-4 text-muted-foreground shrink-0 mt-3" />
+                <PersonMini
+                  fallback={pair.person_b}
+                  person={personB}
+                  context={personB ? contextFor(personB.id) : undefined}
+                  onEdit={personB ? () => setEditing(personB) : undefined}
+                />
               </div>
 
               <div className="flex gap-2 pt-1">
@@ -150,6 +261,10 @@ function DuplicatesPage() {
           );
         })}
       </div>
+
+      {editing && (
+        <PersonFormDialog mode="edit" person={editing} onClose={handleEditClose} />
+      )}
     </div>
   );
 }
