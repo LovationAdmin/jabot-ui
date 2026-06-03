@@ -48,6 +48,9 @@ export const useAuthStore = create<AuthStore>()(
       setOnboarded: (personId, firstName) => set({ personId, firstName, onboarded: true }),
 
       setTreeAccesses: (accesses, activeTreeId) => {
+        // Garde-fou : données corrompues dans localStorage → on repart de zéro.
+        const safeAccesses = Array.isArray(accesses) ? accesses : [];
+        accesses = safeAccesses;
         // Conserve l'arbre actif courant s'il fait toujours partie des accès ;
         // sinon retombe sur celui fourni par le backend, sinon le premier.
         const current = get().activeTreeId;

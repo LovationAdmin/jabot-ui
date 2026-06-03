@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { useAuthStore } from "./lib/store";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 
 // Le store auth utilise skipHydration: on relit donc explicitement le
@@ -23,6 +24,8 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <ErrorBoundary>
+      <RouterProvider router={router} />
+    </ErrorBoundary>
   </StrictMode>,
 );
