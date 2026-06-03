@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, GitMerge, CheckCircle, AlertCircle, Loader2, Users, Pencil, Layers } from "lucide-react";
 import { duplicatesApi, DuplicatePair } from "@/lib/api";
 import { useFamilyTreeStore } from "@/lib/store";
@@ -116,12 +116,41 @@ function DuplicatesPage() {
       .catch(() => setError("Impossible de charger les doublons."))
       .finally(() => setLoading(false));
 
+  // Refresh silencieux (sans spinner) pour les recalculs reactifs apres edition.
+  const silentRefresh = () =>
+    duplicatesApi.detect().then(setPairs).catch(() => {});
+
   useEffect(() => {
     // L'arbre est necessaire pour afficher le contexte familial et editer une fiche.
     if (tree.persons.length === 0) loadTree();
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Signature des champs qui influencent la detection (identite + relations).
+  // Toute modification d'une fiche (date, nom, sexe) ou d'un lien la fait changer.
+  const treeSignature = useMemo(
+    () =>
+      tree.persons
+        .map((p) => `${p.id}:${p.firstName}:${p.lastName ?? ""}:${p.birthDate ?? ""}:${p.gender}`)
+        .join("|") +
+      "#" +
+      tree.relationships.map((r) => `${r.personAId}>${r.personBId}:${r.type}`).join("|"),
+    [tree],
+  );
+
+  // Recalcule dynamiquement les doublons quand l'arbre change (edition d'une
+  // fiche, ajout/suppression de lien…), debounce pour collapser les rafales.
+  const firstSig = useRef(true);
+  useEffect(() => {
+    if (firstSig.current) {
+      firstSig.current = false;
+      return;
+    }
+    const t = setTimeout(() => silentRefresh(), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treeSignature]);
 
   const visiblePairs = pairs.filter(
     (p) => !dismissed.has(`${p.person_a.id}-${p.person_b.id}`)
@@ -174,13 +203,11 @@ function DuplicatesPage() {
     }
   }
 
-  // A la fermeture de l'edition : recharge l'arbre puis recalcule les doublons
-  // (une fiche corrigee peut ne plus etre un doublon).
+  // A la fermeture de l'edition : recharge l'arbre. Le recalcul des doublons se
+  // declenche automatiquement via le refresh reactif (treeSignature).
   async function handleEditClose() {
     setEditing(null);
     await loadTree();
-    setLoading(true);
-    await refresh();
   }
 
   return (
