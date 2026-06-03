@@ -10,6 +10,7 @@ import { AccountMenu } from "@/components/tree/AccountMenu";
 import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { ExportDialog } from "@/components/tree/ExportDialog";
 import { InviteManager } from "@/components/tree/InviteManager";
+import { ConvergeBanner } from "@/components/tree/ConvergeBanner";
 import { TreeTabs } from "@/components/tree/TreeTabs";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
@@ -418,6 +419,9 @@ function JabotCanvas() {
       />
 
       <main className="relative flex flex-1 overflow-hidden">
+        {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
+        {isAuthenticated && !searchOpen && <ConvergeBanner />}
+
         {/* Banner visiteur */}
         {!isAuthenticated && tree.persons.length > 0 && !searchOpen && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3">

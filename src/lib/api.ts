@@ -250,6 +250,22 @@ export const treesApi = {
   remove: async (treeId: string): Promise<void> => {
     await apiClient.delete(`/trees/${treeId}`);
   },
+  // Convergence : rapatrie l'arbre source (dont on est propriétaire) dans
+  // l'arbre cible (où l'on a été invité), en fusionnant la fiche d'identité.
+  converge: async (
+    targetTreeId: string,
+    params: { sourceTreeId: string; sourcePersonId?: string; targetPersonId?: string },
+  ): Promise<{ personsMoved: number; identityMerged: boolean }> => {
+    const { data } = await apiClient.post<{ persons_moved: number; identity_merged: boolean }>(
+      `/trees/${targetTreeId}/converge`,
+      {
+        source_tree_id: params.sourceTreeId,
+        source_person_id: params.sourcePersonId,
+        target_person_id: params.targetPersonId,
+      },
+    );
+    return { personsMoved: data.persons_moved, identityMerged: data.identity_merged };
+  },
 };
 
 // ─── Tree ────────────────────────────────────────────────────────
