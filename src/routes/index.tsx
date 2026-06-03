@@ -100,8 +100,8 @@ function JabotCanvas() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    loadTree();
-  }, [loadTree]);
+    if (visitorAllowed) loadTree();
+  }, [loadTree, visitorAllowed]);
 
   // Recalcule le nombre de doublons a examiner apres chaque (re)chargement de
   // l'arbre actif. Reserve aux utilisateurs rattaches (les visiteurs n'ont pas
