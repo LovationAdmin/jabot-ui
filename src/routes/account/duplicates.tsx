@@ -26,11 +26,13 @@ function ContextRow({ label, refs }: { label: string; refs: { id: string; name: 
 function PersonMini({
   fallback,
   person,
+  other,
   context,
   onEdit,
 }: {
   fallback: DuplicatePair["person_a"];
   person?: Person;
+  other?: { birth_date?: string | null };
   context?: PersonContext;
   onEdit?: () => void;
 }) {
@@ -40,6 +42,10 @@ function PersonMini({
   const year = (person?.birthDate ?? fallback.birth_date)?.slice(0, 4);
   const gender = person?.gender ?? fallback.gender;
   const photo = person?.photos?.[0]?.url;
+
+  // Surligne l'annee si elle differe de l'autre fiche : indice fort pour decider.
+  const otherYear = (other?.birth_date ?? undefined)?.slice(0, 4);
+  const yearDiffers = !!year && !!otherYear && year !== otherYear;
 
   return (
     <div className="rounded-xl border bg-card p-3 text-sm min-w-0 flex-1 space-y-1.5">
@@ -54,9 +60,14 @@ function PersonMini({
         <div className="min-w-0 flex-1">
           <p className="font-semibold truncate">{name}</p>
           <p className="text-muted-foreground text-xs">
-            {[year, gender && (gender === "male" ? "H" : gender === "female" ? "F" : "—")]
-              .filter(Boolean)
-              .join(" · ") || "Infos manquantes"}
+            {year ? (
+              <span className={yearDiffers ? "rounded bg-amber-100 px-1 font-medium text-amber-700" : ""}>
+                {year}
+              </span>
+            ) : null}
+            {year && gender ? " · " : null}
+            {gender ? (gender === "male" ? "H" : gender === "female" ? "F" : "—") : null}
+            {!year && !gender ? "Infos manquantes" : null}
           </p>
         </div>
         {onEdit && (
@@ -145,9 +156,22 @@ function DuplicatesPage() {
     }
   }
 
-  function handleDismiss(pair: DuplicatePair) {
+  // "Ignorer" = declarer que ce n'est PAS un doublon. Persiste cote serveur et
+  // s'applique a tout l'arbre (tout membre, toute session). Retrait optimiste.
+  async function handleDismiss(pair: DuplicatePair) {
     const key = `${pair.person_a.id}-${pair.person_b.id}`;
     setDismissed((prev) => new Set([...prev, key]));
+    try {
+      await duplicatesApi.ignore(pair.person_a.id, pair.person_b.id);
+    } catch {
+      // Echec : on remet la paire et on signale.
+      setDismissed((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      setError("Impossible d'ignorer ce doublon. Réessaie.");
+    }
   }
 
   // A la fermeture de l'edition : recharge l'arbre puis recalcule les doublons
@@ -196,8 +220,10 @@ function DuplicatesPage() {
 
         {!loading && visiblePairs.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            Vérifie chaque paire : fusionne si c'est bien la même personne, ou modifie une fiche
-            (date de naissance, nom…) pour lever l'ambiguïté.
+            Vérifie chaque paire : <strong className="text-foreground/80">Fusionner</strong> si c'est la même
+            personne, modifier une fiche pour lever l'ambiguïté, ou{" "}
+            <strong className="text-foreground/80">Pas un doublon</strong> — ce choix est partagé avec tout l'arbre
+            et la paire ne reviendra plus.
           </p>
         )}
 
@@ -224,6 +250,7 @@ function DuplicatesPage() {
                 <PersonMini
                   fallback={pair.person_a}
                   person={personA}
+                  other={pair.person_b}
                   context={personA ? contextFor(personA.id) : undefined}
                   onEdit={personA ? () => setEditing(personA) : undefined}
                 />
@@ -231,6 +258,7 @@ function DuplicatesPage() {
                 <PersonMini
                   fallback={pair.person_b}
                   person={personB}
+                  other={pair.person_a}
                   context={personB ? contextFor(personB.id) : undefined}
                   onEdit={personB ? () => setEditing(personB) : undefined}
                 />
@@ -252,9 +280,10 @@ function DuplicatesPage() {
                 <button
                   onClick={() => handleDismiss(pair)}
                   disabled={isMerging}
+                  title="Marquer comme « pas un doublon » pour tout l'arbre"
                   className="px-4 rounded-xl border text-sm hover:bg-muted transition-colors disabled:opacity-50"
                 >
-                  Ignorer
+                  Pas un doublon
                 </button>
               </div>
             </div>

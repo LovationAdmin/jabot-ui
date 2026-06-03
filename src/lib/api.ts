@@ -490,6 +490,15 @@ export const duplicatesApi = {
     const { data } = await apiClient.post<{ count: number }>("/tree/auto-merge-duplicates");
     return data;
   },
+
+  // Declare une paire comme "pas un doublon" — partage par tout l'arbre.
+  ignore: async (personAId: string, personBId: string): Promise<void> => {
+    await apiClient.post("/tree/duplicates/ignore", { person_a_id: personAId, person_b_id: personBId });
+  },
+
+  unignore: async (personAId: string, personBId: string): Promise<void> => {
+    await apiClient.delete("/tree/duplicates/ignore", { data: { person_a_id: personAId, person_b_id: personBId } });
+  },
 };
 
 // ─── Invitations ──────────────────────────────────────────────────
