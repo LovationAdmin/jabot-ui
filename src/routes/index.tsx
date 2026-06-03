@@ -15,10 +15,10 @@ import { DuplicateAlert } from "@/components/tree/DuplicateAlert";
 import { TreeTabs } from "@/components/tree/TreeTabs";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
+import { invitationsApi, setActiveTreeId, personsApi } from "@/lib/api";
 import { useTreeSync } from "@/lib/useTreeSync";
 import { computeComponents } from "@/lib/treeComponents";
 import { useTabNames } from "@/lib/useTabNames";
-import { personsApi } from "@/lib/api";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
 import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
@@ -74,6 +74,30 @@ function JabotCanvas() {
 
   // L'onboarding s'affiche une seule fois : connecte mais pas encore rattache.
   const showOnboarding = isAuthenticated && !onboarded;
+
+  // Contrôle d'accès : un visiteur anonyme n'accède au canvas que s'il possède
+  // un cookie d'invitation validé. Sans ça → page de bienvenue.
+  const [visitorAllowed, setVisitorAllowed] = useState<boolean | null>(isAuthenticated ? true : null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setVisitorAllowed(true);
+      return;
+    }
+    invitationsApi.check().then((res) => {
+      if (res.valid) {
+        // Si le backend nous donne un tree_id et qu'on n'en a pas déjà un, on l'applique.
+        if (res.tree_id) {
+          setActiveTreeId(res.tree_id);
+          useAuthStore.getState().setActiveTree(res.tree_id);
+        }
+        setVisitorAllowed(true);
+      } else {
+        setVisitorAllowed(false);
+      }
+    }).catch(() => setVisitorAllowed(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   useEffect(() => {
     loadTree();
@@ -367,6 +391,50 @@ function JabotCanvas() {
     setPan({ x: viewport.w / 2 - wx * z - 104 * z, y: viewport.h / 2 - wy * z - 50 * z });
     setSelectedId(pid);
   };
+
+  // Vérification en cours → spinner
+  if (visitorAllowed === null) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-canvas">
+        <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Visiteur sans invitation valide → page de bienvenue
+  if (!visitorAllowed) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 text-center">
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <div className="grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+            <TreePine className="size-7" />
+          </div>
+          <h1 className="font-serif text-4xl text-foreground">Jabot</h1>
+          <p className="text-base text-muted-foreground">Votre arbre généalogique africain</p>
+        </div>
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-card space-y-5">
+          <h2 className="font-semibold text-lg text-foreground">Bienvenue</h2>
+          <p className="text-sm text-muted-foreground">
+            Pour accéder à un arbre, vous devez être membre ou avoir reçu une invitation.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => navigate({ to: "/auth" })}
+              className="w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Se connecter / Créer un compte
+            </button>
+            <button
+              onClick={() => navigate({ to: "/invite" })}
+              className="w-full rounded-xl border border-border bg-background py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              J'ai reçu une invitation
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-canvas text-foreground">

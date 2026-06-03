@@ -508,11 +508,11 @@ export const invitationsApi = {
     const { data } = await apiClient.post("/invitations/", { phone });
     return data;
   },
-  validate: async (token: string, code: string): Promise<{ success: boolean; message: string }> => {
+  validate: async (token: string, code: string): Promise<{ success: boolean; message: string; tree_id?: string }> => {
     const { data } = await apiClient.post("/invitations/validate", { token, code }, { withCredentials: true });
     return data;
   },
-  check: async (): Promise<{ valid: boolean; reason: string }> => {
+  check: async (): Promise<{ valid: boolean; reason: string; tree_id?: string }> => {
     const { data } = await apiClient.get("/invitations/check", { withCredentials: true });
     return data;
   },

@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { TreePine, KeyRound, CheckCircle } from "lucide-react";
-import { invitationsApi } from "@/lib/api";
+import { invitationsApi, setActiveTreeId } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
 import { z } from "zod";
 
 const searchSchema = z.object({
@@ -31,7 +32,12 @@ function InvitePage() {
     setLoading(true);
     setError(null);
     try {
-      await invitationsApi.validate(token.trim(), code.trim());
+      const res = await invitationsApi.validate(token.trim(), code.trim());
+      // Mémorise l'arbre de l'invitation pour que le canvas le charge directement.
+      if (res.tree_id) {
+        setActiveTreeId(res.tree_id);
+        useAuthStore.getState().setActiveTree(res.tree_id);
+      }
       setSuccess(true);
       setTimeout(() => navigate({ to: "/" }), 2000);
     } catch (err: any) {
