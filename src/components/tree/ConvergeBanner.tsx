@@ -1,23 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitMerge, Loader2, X, Check, AlertCircle, Sparkles } from "lucide-react";
+import { GitMerge, Loader2, X, Check, AlertCircle, Sparkles, Clock, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { mergeRequestsApi, personsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
-import { CrossTreeMatch } from "@/lib/types";
-
-/**
- * Dialog "Relier mon arbre" — flux simplifié.
- *
- * 1. Ouverture → détection automatique de la fiche dans l'autre arbre
- * 2. Affichage de la fiche trouvée + confirmation en un clic
- * 3. Si aucune correspondance : message + possibilité de choisir manuellement
- */
+import { CrossTreeMatch, MergeRequest } from "@/lib/types";
 
 type Step = "detecting" | "found" | "not_found" | "requesting" | "requested" | "done";
+type Tab = "new" | "history";
 
 function confidenceBadge(c: number) {
   if (c >= 0.85) return "bg-emerald-500/15 text-emerald-400 border-emerald-500/20";
   if (c >= 0.65) return "bg-amber-500/15 text-amber-400 border-amber-500/20";
   return "bg-blue-500/15 text-blue-400 border-blue-500/20";
+}
+
+function statusBadge(status: MergeRequest["status"]) {
+  if (status === "approved") return { icon: CheckCircle2, label: "Approuvée", cls: "text-emerald-400" };
+  if (status === "rejected") return { icon: XCircle, label: "Refusée", cls: "text-destructive" };
+  return { icon: Clock, label: "En attente", cls: "text-amber-400" };
 }
 
 interface Props {
@@ -27,7 +26,7 @@ interface Props {
 }
 
 export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches }: Props = {}) {
-  const { treeAccesses, activeTreeId, personId } = useAuthStore();
+  const { treeAccesses, activeTreeId, personId, userId } = useAuthStore();
   const { tree } = useFamilyTreeStore();
 
   const [open, setOpen] = useState(false);
@@ -36,13 +35,15 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   const [matches, setMatches] = useState<CrossTreeMatch[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<CrossTreeMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("new");
+  const [myRequests, setMyRequests] = useState<MergeRequest[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const activeAccess = treeAccesses.find((t) => t.treeId === activeTreeId);
   const ownedOther = useMemo(
     () => treeAccesses.find((t) => t.role === "owner" && t.treeId !== activeTreeId),
     [treeAccesses, activeTreeId],
   );
-  // L'arbre que l'utilisateur possède (source de la convergence)
   const ownedTree = useMemo(
     () => ownedOther ?? treeAccesses.find((t) => t.role === "owner"),
     [ownedOther, treeAccesses],
@@ -62,6 +63,18 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceOpen]);
 
+  useEffect(() => {
+    if (!open || tab !== "history") return;
+    setLoadingHistory(true);
+    mergeRequestsApi.listAll()
+      .then((reqs) => {
+        // Only show requests submitted by the current user
+        setMyRequests(reqs.filter((r) => r.requestedByUserId === userId));
+      })
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false));
+  }, [open, tab, userId]);
+
   if (!shouldShowPill && !open) return null;
 
   async function handleOpen(injectedMatches?: CrossTreeMatch[]) {
@@ -69,9 +82,9 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
     setMatches([]);
     setSelectedMatch(null);
     setError(null);
+    setTab("new");
     setOpen(true);
 
-    // Si des matches sont déjà connus (depuis la bannière cross-tree), les utiliser directement
     const preloaded = injectedMatches ?? preloadedMatches;
     if (preloaded && preloaded.length > 0) {
       setMatches(preloaded);
@@ -172,155 +185,212 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
               )}
             </div>
 
-            {/* Détection en cours */}
-            {step === "detecting" && (
-              <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Recherche de votre fiche…</p>
+            {/* Tabs */}
+            {step !== "requesting" && (
+              <div className="flex border-b border-border">
+                <button
+                  onClick={() => setTab("new")}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${tab === "new" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Nouvelle demande
+                </button>
+                <button
+                  onClick={() => setTab("history")}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${tab === "history" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Demandes en cours
+                </button>
               </div>
             )}
 
-            {/* Fiche trouvée */}
-            {step === "found" && selectedMatch && (
-              <div className="space-y-4 px-5 py-5">
-                <div className="flex items-start gap-2.5">
-                  <Sparkles className="size-4 shrink-0 text-primary mt-0.5" />
-                  <p className="text-sm text-muted-foreground">
-                    Votre fiche a été trouvée dans un autre arbre.
-                  </p>
-                </div>
-
-                {/* Carte de la fiche */}
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-base font-semibold text-foreground">
-                      {selectedMatch.firstName}{selectedMatch.lastName ? ` ${selectedMatch.lastName}` : ""}
-                    </span>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(selectedMatch.confidence)}`}>
-                      {Math.round(selectedMatch.confidence * 100)}%
-                    </span>
+            {/* ── Tab: Nouvelle demande ── */}
+            {tab === "new" && (
+              <>
+                {step === "detecting" && (
+                  <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Recherche de votre fiche…</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{selectedMatch.treeName}</p>
-                  {selectedMatch.birthDate && (
-                    <p className="text-xs text-muted-foreground">
-                      Né(e) le {new Date(selectedMatch.birthDate).toLocaleDateString("fr-FR")}
-                    </p>
-                  )}
-                  {selectedMatch.matchReasons.length > 0 && (
-                    <p className="text-xs text-muted-foreground">{selectedMatch.matchReasons[0]}</p>
-                  )}
-                </div>
+                )}
 
-                {/* Autres correspondances */}
-                {matches.length > 1 && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">Autres correspondances</p>
-                    {matches.slice(1).map((m) => (
-                      <button
-                        key={m.personId}
-                        onClick={() => setSelectedMatch(m)}
-                        className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${selectedMatch.personId === m.personId ? "border-primary bg-primary/5" : "border-border hover:bg-muted"}`}
-                      >
-                        <div>
-                          <span className="text-sm text-foreground">{m.firstName}{m.lastName ? ` ${m.lastName}` : ""}</span>
-                          <span className="ml-1.5 text-xs text-muted-foreground">· {m.treeName}</span>
-                        </div>
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(m.confidence)}`}>
-                          {Math.round(m.confidence * 100)}%
+                {step === "found" && selectedMatch && (
+                  <div className="space-y-4 px-5 py-5">
+                    <div className="flex items-start gap-2.5">
+                      <Sparkles className="size-4 shrink-0 text-primary mt-0.5" />
+                      <p className="text-sm text-muted-foreground">
+                        Votre fiche a été trouvée dans un autre arbre.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-base font-semibold text-foreground">
+                          {selectedMatch.firstName}{selectedMatch.lastName ? ` ${selectedMatch.lastName}` : ""}
                         </span>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(selectedMatch.confidence)}`}>
+                          {Math.round(selectedMatch.confidence * 100)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{selectedMatch.treeName}</p>
+                      {selectedMatch.birthDate && (
+                        <p className="text-xs text-muted-foreground">
+                          Né(e) le {new Date(selectedMatch.birthDate).toLocaleDateString("fr-FR")}
+                        </p>
+                      )}
+                      {selectedMatch.matchReasons.length > 0 && (
+                        <p className="text-xs text-muted-foreground">{selectedMatch.matchReasons[0]}</p>
+                      )}
+                    </div>
+
+                    {matches.length > 1 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-muted-foreground">Autres correspondances</p>
+                        {matches.slice(1).map((m) => (
+                          <button
+                            key={m.personId}
+                            onClick={() => setSelectedMatch(m)}
+                            className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${selectedMatch.personId === m.personId ? "border-primary bg-primary/5" : "border-border hover:bg-muted"}`}
+                          >
+                            <div>
+                              <span className="text-sm text-foreground">{m.firstName}{m.lastName ? ` ${m.lastName}` : ""}</span>
+                              <span className="ml-1.5 text-xs text-muted-foreground">· {m.treeName}</span>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(m.confidence)}`}>
+                              {Math.round(m.confidence * 100)}%
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      Une demande sera envoyée aux membres de « {selectedMatch.treeName} ».
+                      Dès qu'un d'eux l'approuve, votre arbre « {ownedTree?.treeName} » y sera intégré.
+                    </p>
+
+                    {error && (
+                      <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleClose}
+                        className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                      >
+                        Annuler
                       </button>
-                    ))}
+                      <button
+                        onClick={handleRequestMerge}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      >
+                        <GitMerge className="size-4" /> Envoyer la demande
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground">
-                  Une demande sera envoyée aux membres de « {selectedMatch.treeName} ».
-                  Dès qu'un d'eux l'approuve, votre arbre « {ownedTree?.treeName} » y sera intégré.
-                </p>
-
-                {error && (
-                  <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+                {step === "not_found" && (
+                  <div className="space-y-4 px-5 py-5">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="size-4 shrink-0 text-muted-foreground mt-0.5" />
+                      <p className="text-sm text-muted-foreground">
+                        Aucune fiche commune n'a été trouvée automatiquement.
+                        Demandez à un membre de l'autre arbre de vous inviter.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleClose}
+                      className="w-full rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                    >
+                      Fermer
+                    </button>
+                  </div>
                 )}
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleClose}
-                    className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={handleRequestMerge}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    <GitMerge className="size-4" /> Envoyer la demande
-                  </button>
-                </div>
-              </div>
+                {step === "requesting" && (
+                  <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Envoi de la demande…</p>
+                  </div>
+                )}
+
+                {step === "requested" && (
+                  <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
+                    <div className="grid size-12 place-items-center rounded-full bg-primary/10">
+                      <Check className="size-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Demande envoyée !</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Les membres de « {selectedMatch?.treeName} » recevront une notification.
+                        La fusion sera effectuée dès qu'un d'eux approuve.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setTab("history"); setStep("detecting"); }}
+                      className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      Voir le statut <ChevronRight className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { setOpen(false); setDismissed(true); }}
+                      className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                )}
+
+                {step === "done" && (
+                  <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                    <div className="grid size-12 place-items-center rounded-full bg-emerald-500/15">
+                      <Check className="size-6 text-emerald-500" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">Arbres reliés avec succès !</p>
+                    <button
+                      onClick={() => { setOpen(false); setDismissed(true); }}
+                      className="mt-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      Continuer
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Aucune correspondance */}
-            {step === "not_found" && (
-              <div className="space-y-4 px-5 py-5">
-                <div className="flex items-start gap-2.5">
-                  <AlertCircle className="size-4 shrink-0 text-muted-foreground mt-0.5" />
-                  <p className="text-sm text-muted-foreground">
-                    Aucune fiche commune n'a été trouvée automatiquement.
-                    Demandez à un membre de l'autre arbre de vous inviter.
-                  </p>
-                </div>
-                <button
-                  onClick={handleClose}
-                  className="w-full rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-                >
-                  Fermer
-                </button>
-              </div>
-            )}
-
-            {/* Envoi en cours */}
-            {step === "requesting" && (
-              <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Envoi de la demande…</p>
-              </div>
-            )}
-
-            {/* Demande envoyée */}
-            {step === "requested" && (
-              <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
-                <div className="grid size-12 place-items-center rounded-full bg-primary/10">
-                  <Check className="size-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Demande envoyée !</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Les membres de « {selectedMatch?.treeName} » recevront une notification.
-                    La fusion sera effectuée dès qu'un d'eux approuve.
-                  </p>
-                </div>
-                <button
-                  onClick={() => { setOpen(false); setDismissed(true); }}
-                  className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  Fermer
-                </button>
-              </div>
-            )}
-
-            {/* Succès (fusion directe réussie — gardé pour compatibilité) */}
-            {step === "done" && (
-              <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-                <div className="grid size-12 place-items-center rounded-full bg-emerald-500/15">
-                  <Check className="size-6 text-emerald-500" />
-                </div>
-                <p className="text-sm font-medium text-foreground">Arbres reliés avec succès !</p>
-                <button
-                  onClick={() => { setOpen(false); setDismissed(true); }}
-                  className="mt-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  Continuer
-                </button>
+            {/* ── Tab: Demandes en cours ── */}
+            {tab === "history" && (
+              <div className="px-5 py-5 space-y-3 max-h-80 overflow-y-auto">
+                {loadingHistory ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                  </div>
+                ) : myRequests.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <GitMerge className="size-6 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">Aucune demande envoyée.</p>
+                  </div>
+                ) : (
+                  myRequests.map((req) => {
+                    const { icon: Icon, label, cls } = statusBadge(req.status);
+                    return (
+                      <div key={req.id} className="rounded-xl border border-border px-4 py-3 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {req.sourceTreeName ?? "Mon arbre"} → {req.targetTreeName ?? "Arbre cible"}
+                          </p>
+                          <div className={`flex items-center gap-1 shrink-0 text-xs font-medium ${cls}`}>
+                            <Icon className="size-3.5" />
+                            {label}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(req.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
 
