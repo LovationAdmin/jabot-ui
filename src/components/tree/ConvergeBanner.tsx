@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GitMerge, Loader2, X, Check, ChevronRight, Users, AlertCircle } from "lucide-react";
 import { treesApi, authApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
@@ -25,7 +25,12 @@ function personLabel(firstName: string, lastName?: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
-export function ConvergeBanner() {
+interface Props {
+  forceOpen?: boolean;
+  onForceOpenHandled?: () => void;
+}
+
+export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
   const { treeAccesses, activeTreeId, personId, setActiveTree, setTreeAccesses } = useAuthStore();
   const { tree, loadTree, refreshDuplicateCount } = useFamilyTreeStore();
 
@@ -56,7 +61,16 @@ export function ConvergeBanner() {
     !!ownedOther &&
     tree.persons.length > 0;
 
-  if (!shouldShow) return null;
+  // Allow opening from AccountMenu even when shouldShow conditions aren't met
+  useEffect(() => {
+    if (forceOpen) {
+      handleOpen();
+      onForceOpenHandled?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceOpen]);
+
+  if (!shouldShow && !open) return null;
 
   function handleOpen() {
     setStep("identity");
