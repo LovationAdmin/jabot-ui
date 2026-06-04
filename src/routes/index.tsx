@@ -64,6 +64,7 @@ function JabotCanvas() {
   const [exportOpen, setExportOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [convergeOpen, setConvergeOpen] = useState(false);
+  const [convergeMatches, setConvergeMatches] = useState<import("@/lib/types").CrossTreeMatch[]>([]);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   // Référence pour le pinch-to-zoom sur mobile (2 doigts).
   const touchRef = useRef<{
@@ -500,7 +501,7 @@ function JabotCanvas() {
 
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
-        {isAuthenticated && !searchOpen && <ConvergeBanner forceOpen={convergeOpen} onForceOpenHandled={() => setConvergeOpen(false)} />}
+        {isAuthenticated && !searchOpen && <ConvergeBanner forceOpen={convergeOpen} onForceOpenHandled={() => setConvergeOpen(false)} preloadedMatches={convergeMatches} />}
 
         {/* Alerte doublons a examiner (membre/proprietaire) */}
         {isAuthenticated && !searchOpen && <DuplicateAlert />}
@@ -739,7 +740,7 @@ function JabotCanvas() {
       </main>
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
-      {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} onConverge={() => { setForm(null); setConvergeOpen(true); }} />}
+      {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} onConverge={(matches) => { setForm(null); setConvergeMatches(matches ?? []); setConvergeOpen(true); }} />}
       {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}
       {exportOpen && (
         <ExportDialog
