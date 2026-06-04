@@ -99,6 +99,20 @@ export interface CrossTreeMatchPair {
   matchStage: string;
 }
 
+export interface MergeRequest {
+  id: string;
+  sourceTreeId: string;
+  targetTreeId: string;
+  sourcePersonId?: string;
+  targetPersonId?: string;
+  requestedByUserId: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  sourceTreeName?: string;
+  targetTreeName?: string;
+  requesterFirstName?: string;
+}
+
 export interface PersonFormData {
   firstName: string;
   lastName: string;

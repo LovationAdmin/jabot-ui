@@ -11,6 +11,7 @@ import { SurnameLegend } from "@/components/tree/SurnameLegend";
 import { ExportDialog } from "@/components/tree/ExportDialog";
 import { InviteManager } from "@/components/tree/InviteManager";
 import { ConvergeBanner } from "@/components/tree/ConvergeBanner";
+import { MergeRequestPopup } from "@/components/tree/MergeRequestPopup";
 import { DuplicateAlert } from "@/components/tree/DuplicateAlert";
 import { TreeTabs } from "@/components/tree/TreeTabs";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
@@ -739,6 +740,7 @@ function JabotCanvas() {
         </div>
       </main>
 
+      {isAuthenticated && <MergeRequestPopup />}
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} onConverge={(matches) => { setForm(null); setConvergeMatches(matches ?? []); setConvergeOpen(true); }} />}
       {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}

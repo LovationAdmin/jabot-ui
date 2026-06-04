@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitMerge, Loader2, X, Check, AlertCircle, Sparkles } from "lucide-react";
-import { treesApi, authApi, personsApi } from "@/lib/api";
+import { mergeRequestsApi, personsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 import { CrossTreeMatch } from "@/lib/types";
 
@@ -12,7 +12,7 @@ import { CrossTreeMatch } from "@/lib/types";
  * 3. Si aucune correspondance : message + possibilité de choisir manuellement
  */
 
-type Step = "detecting" | "found" | "not_found" | "merging" | "done";
+type Step = "detecting" | "found" | "not_found" | "requesting" | "requested" | "done";
 
 function confidenceBadge(c: number) {
   if (c >= 0.85) return "bg-emerald-500/15 text-emerald-400 border-emerald-500/20";
@@ -27,8 +27,8 @@ interface Props {
 }
 
 export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches }: Props = {}) {
-  const { treeAccesses, activeTreeId, personId, setActiveTree, setTreeAccesses } = useAuthStore();
-  const { tree, loadTree, refreshDuplicateCount } = useFamilyTreeStore();
+  const { treeAccesses, activeTreeId, personId } = useAuthStore();
+  const { tree } = useFamilyTreeStore();
 
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -99,29 +99,24 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   }
 
   function handleClose() {
-    if (step !== "merging") setOpen(false);
+    if (step !== "requesting") setOpen(false);
   }
 
-  async function handleConverge() {
+  async function handleRequestMerge() {
     if (!selectedMatch || !ownedTree) return;
-    setStep("merging");
+    setStep("requesting");
     setError(null);
     try {
-      await treesApi.converge(selectedMatch.treeId, {
+      await mergeRequestsApi.create({
         sourceTreeId: ownedTree.treeId,
+        targetTreeId: selectedMatch.treeId,
         sourcePersonId: personId ?? undefined,
         targetPersonId: selectedMatch.personId,
-        additionalMergePairs: [],
       });
-      const me = await authApi.me();
-      setTreeAccesses(me.treeAccesses, selectedMatch.treeId);
-      setActiveTree(selectedMatch.treeId);
-      await loadTree();
-      await refreshDuplicateCount();
-      setStep("done");
+      setStep("requested");
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detail ?? "La fusion a échoué. Réessayez.");
+      setError(detail ?? "La demande a échoué. Réessayez.");
       setStep("found");
     }
   }
@@ -167,7 +162,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold leading-tight text-foreground">Relier mon arbre</h2>
               </div>
-              {step !== "merging" && (
+              {step !== "requesting" && (
                 <button
                   onClick={handleClose}
                   className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
@@ -239,8 +234,8 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  Votre arbre « {ownedTree?.treeName} » sera intégré à « {selectedMatch.treeName} ».
-                  Cette action est définitive.
+                  Une demande sera envoyée aux membres de « {selectedMatch.treeName} ».
+                  Dès qu'un d'eux l'approuve, votre arbre « {ownedTree?.treeName} » y sera intégré.
                 </p>
 
                 {error && (
@@ -255,10 +250,10 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
                     Annuler
                   </button>
                   <button
-                    onClick={handleConverge}
+                    onClick={handleRequestMerge}
                     className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
-                    <Check className="size-4" /> Confirmer
+                    <GitMerge className="size-4" /> Envoyer la demande
                   </button>
                 </div>
               </div>
@@ -283,15 +278,37 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
               </div>
             )}
 
-            {/* Fusion en cours */}
-            {step === "merging" && (
+            {/* Envoi en cours */}
+            {step === "requesting" && (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
                 <Loader2 className="size-6 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fusion en cours…</p>
+                <p className="text-sm text-muted-foreground">Envoi de la demande…</p>
               </div>
             )}
 
-            {/* Succès */}
+            {/* Demande envoyée */}
+            {step === "requested" && (
+              <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
+                <div className="grid size-12 place-items-center rounded-full bg-primary/10">
+                  <Check className="size-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Demande envoyée !</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Les membres de « {selectedMatch?.treeName} » recevront une notification.
+                    La fusion sera effectuée dès qu'un d'eux approuve.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setOpen(false); setDismissed(true); }}
+                  className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
+
+            {/* Succès (fusion directe réussie — gardé pour compatibilité) */}
             {step === "done" && (
               <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
                 <div className="grid size-12 place-items-center rounded-full bg-emerald-500/15">
