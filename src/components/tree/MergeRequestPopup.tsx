@@ -37,13 +37,18 @@ export function MergeRequestPopup() {
     setError(null);
     try {
       await mergeRequestsApi.approve(current.id);
-      // Rafraîchir la session et l'arbre
-      const me = await authApi.me();
-      setTreeAccesses(me.treeAccesses, activeTreeId ?? undefined);
-      if (activeTreeId) setActiveTree(activeTreeId);
-      await loadTree();
-      await refreshDuplicateCount();
+      // Fermer le popup immédiatement après succès, avant le refresh
       advance();
+      // Rafraîchir la session et l'arbre en arrière-plan (erreurs non bloquantes)
+      try {
+        const me = await authApi.me();
+        setTreeAccesses(me.treeAccesses, activeTreeId ?? undefined);
+        if (activeTreeId) setActiveTree(activeTreeId);
+        await loadTree();
+        await refreshDuplicateCount();
+      } catch {
+        // Le refresh a échoué mais la fusion est effective — l'user verra les changements au prochain chargement
+      }
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail ?? "La fusion a échoué. Réessayez.");
