@@ -328,6 +328,64 @@ export const treesApi = {
   },
 };
 
+// ─── Demandes de fusion ───────────────────────────────────────────
+
+import type { MergeRequest } from "./types";
+
+function mapMergeRequest(r: {
+  id: string; source_tree_id: string; target_tree_id: string;
+  source_person_id?: string | null; target_person_id?: string | null;
+  requested_by_user_id: string; status: string; created_at: string;
+  source_tree_name?: string | null; target_tree_name?: string | null;
+  requester_first_name?: string | null;
+}): MergeRequest {
+  return {
+    id: r.id,
+    sourceTreeId: r.source_tree_id,
+    targetTreeId: r.target_tree_id,
+    sourcePersonId: r.source_person_id ?? undefined,
+    targetPersonId: r.target_person_id ?? undefined,
+    requestedByUserId: r.requested_by_user_id,
+    status: r.status as MergeRequest["status"],
+    createdAt: r.created_at,
+    sourceTreeName: r.source_tree_name ?? undefined,
+    targetTreeName: r.target_tree_name ?? undefined,
+    requesterFirstName: r.requester_first_name ?? undefined,
+  };
+}
+
+export const mergeRequestsApi = {
+  create: async (params: {
+    sourceTreeId: string;
+    targetTreeId: string;
+    sourcePersonId?: string;
+    targetPersonId?: string;
+  }): Promise<MergeRequest> => {
+    const { data } = await apiClient.post("/merge-requests", {
+      source_tree_id: params.sourceTreeId,
+      target_tree_id: params.targetTreeId,
+      source_person_id: params.sourcePersonId,
+      target_person_id: params.targetPersonId,
+    });
+    return mapMergeRequest(data);
+  },
+
+  listPending: async (): Promise<MergeRequest[]> => {
+    const { data } = await apiClient.get<unknown[]>("/merge-requests/pending");
+    return (data ?? []).map((r) => mapMergeRequest(r as Parameters<typeof mapMergeRequest>[0]));
+  },
+
+  approve: async (requestId: string): Promise<MergeRequest> => {
+    const { data } = await apiClient.post(`/merge-requests/${requestId}/approve`);
+    return mapMergeRequest(data);
+  },
+
+  reject: async (requestId: string): Promise<MergeRequest> => {
+    const { data } = await apiClient.post(`/merge-requests/${requestId}/reject`);
+    return mapMergeRequest(data);
+  },
+};
+
 // ─── Tree ────────────────────────────────────────────────────────
 
 export const treeApi = {
