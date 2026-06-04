@@ -7,7 +7,8 @@ import { personsApi, relationshipsApi, mediaApi } from "@/lib/api";
 import { PersonSearchSelect } from "./PersonSearchSelect";
 import { startVoiceRecording, VoiceRecorder } from "@/lib/recorder";
 import { useFamilyTreeStore } from "@/lib/store";
-import { Person, Relationship } from "@/lib/types";
+import { Person, Relationship, CrossTreeMatch } from "@/lib/types";
+import { CrossTreeSuggestionBanner } from "./CrossTreeSuggestionBanner";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   const [savedId, setSavedId] = useState<string | null>(person?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [crossTreeMatches, setCrossTreeMatches] = useState<CrossTreeMatch[]>([]);
 
   // ── Step 1 form ────────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -600,11 +602,44 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                 error={error}
                 busy={busy}
                 onBack={() => goTo("siblings", "back")}
-                onNext={() => commitDrafts(relatives, async () => { await loadTree(); requestFitTree(); onClose(); })}
+                onNext={() => commitDrafts(relatives, async () => {
+                  await loadTree();
+                  requestFitTree();
+                  // Scan cross-arbre après la dernière étape
+                  const pid = savedId ?? person?.id;
+                  if (pid) {
+                    try {
+                      const suggestions = await personsApi.getCrossTreeSuggestions(pid);
+                      if (suggestions.length > 0) {
+                        setCrossTreeMatches(suggestions);
+                        setStep("cross_tree" as Step);
+                        return; // ne pas fermer — montrer les suggestions
+                      }
+                    } catch { /* silencieux */ }
+                  }
+                  onClose();
+                })}
                 onRemoveExisting={(relId) => removeExistingRel(relId, setRelatives)}
                 isLastStep
                 inputCls={inputCls}
               />
+            )}
+
+            {/* ── Étape cross-arbre : suggestions de doublons dans d'autres arbres ── */}
+            {(step as string) === "cross_tree" && (
+              <div className="space-y-4 px-6 py-5">
+                <CrossTreeSuggestionBanner
+                  personName={form.firstName || person?.firstName || ""}
+                  matches={crossTreeMatches}
+                  onDismiss={onClose}
+                />
+                <button
+                  onClick={onClose}
+                  className="w-full rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  Fermer
+                </button>
+              </div>
             )}
           </div>
         </div>

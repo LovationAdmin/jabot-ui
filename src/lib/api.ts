@@ -1,5 +1,5 @@
 import axios from "axios";
-import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess, OnboardMatch, CrossTreeMatchPair } from "./types";
+import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess, OnboardMatch, CrossTreeMatchPair, CrossTreeMatch } from "./types";
 import { apiBaseUrl } from "./config";
 import { uploadToCloudinary, compressImage, CloudinarySignature } from "./cloudinaryUpload";
 
@@ -387,6 +387,28 @@ export const personsApi = {
   search: async (req: PersonSearchRequest): Promise<SearchResult[]> => {
     const { data } = await apiClient.post<SearchMatchResponse[]>("/persons/search", req);
     return data.map((m) => ({ person: mapPersonResponseToPerson(m.person), confidence: m.confidence, matchReasons: m.match_reasons }));
+  },
+
+  // Cherche dans tous les autres arbres des fiches similaires à cette personne.
+  // À appeler après create ou update pour détecter les doublons cross-arbre.
+  getCrossTreeSuggestions: async (personId: string): Promise<CrossTreeMatch[]> => {
+    const { data } = await apiClient.get<{
+      matches: Array<{
+        tree_id: string; tree_name: string; person_id: string;
+        first_name: string; last_name?: string | null;
+        birth_date?: string | null; confidence: number; match_reasons: string[];
+      }>;
+    }>(`/persons/${personId}/cross-tree-suggestions`);
+    return (data.matches ?? []).map((m) => ({
+      treeId: m.tree_id,
+      treeName: m.tree_name,
+      personId: m.person_id,
+      firstName: m.first_name,
+      lastName: m.last_name ?? undefined,
+      birthDate: m.birth_date ?? undefined,
+      confidence: m.confidence,
+      matchReasons: m.match_reasons,
+    }));
   },
 };
 

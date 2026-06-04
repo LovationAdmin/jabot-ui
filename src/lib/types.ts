@@ -76,6 +76,17 @@ export interface OnboardMatch {
   siblings: MatchRelative[];
 }
 
+export interface CrossTreeMatch {
+  treeId: string;
+  treeName: string;
+  personId: string;
+  firstName: string;
+  lastName?: string;
+  birthDate?: string;
+  confidence: number;
+  matchReasons: string[];
+}
+
 export interface CrossTreeMatchPair {
   sourcePersonId: string;
   sourceFirstName: string;
