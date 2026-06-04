@@ -63,6 +63,7 @@ function JabotCanvas() {
   const worldRef = useRef<HTMLDivElement | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [convergeOpen, setConvergeOpen] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   // Référence pour le pinch-to-zoom sur mobile (2 doigts).
   const touchRef = useRef<{
@@ -467,7 +468,7 @@ function JabotCanvas() {
                 <Plus className="size-4" />
                 <span className="hidden sm:block">Ajouter</span>
               </button>
-              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} />
+              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} onConverge={() => setConvergeOpen(true)} />
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -499,7 +500,7 @@ function JabotCanvas() {
 
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
-        {isAuthenticated && !searchOpen && <ConvergeBanner />}
+        {isAuthenticated && !searchOpen && <ConvergeBanner forceOpen={convergeOpen} onForceOpenHandled={() => setConvergeOpen(false)} />}
 
         {/* Alerte doublons a examiner (membre/proprietaire) */}
         {isAuthenticated && !searchOpen && <DuplicateAlert />}
