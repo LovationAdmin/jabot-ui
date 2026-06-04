@@ -23,9 +23,10 @@ function confidenceBadge(c: number) {
 interface Props {
   forceOpen?: boolean;
   onForceOpenHandled?: () => void;
+  preloadedMatches?: CrossTreeMatch[];
 }
 
-export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
+export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches }: Props = {}) {
   const { treeAccesses, activeTreeId, personId, setActiveTree, setTreeAccesses } = useAuthStore();
   const { tree, loadTree, refreshDuplicateCount } = useFamilyTreeStore();
 
@@ -63,12 +64,21 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
 
   if (!shouldShowPill && !open) return null;
 
-  async function handleOpen() {
+  async function handleOpen(injectedMatches?: CrossTreeMatch[]) {
     setStep("detecting");
     setMatches([]);
     setSelectedMatch(null);
     setError(null);
     setOpen(true);
+
+    // Si des matches sont déjà connus (depuis la bannière cross-tree), les utiliser directement
+    const preloaded = injectedMatches ?? preloadedMatches;
+    if (preloaded && preloaded.length > 0) {
+      setMatches(preloaded);
+      setSelectedMatch(preloaded[0]);
+      setStep("found");
+      return;
+    }
 
     if (!personId) {
       setStep("not_found");
@@ -127,7 +137,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
               Votre famille ? Reliez votre arbre à celui-ci
             </span>
             <button
-              onClick={handleOpen}
+              onClick={() => handleOpen()}
               className="rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Relier

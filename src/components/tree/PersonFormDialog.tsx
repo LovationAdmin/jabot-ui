@@ -40,7 +40,7 @@ interface Props {
   mode: "create" | "edit";
   person?: Person | null;
   onClose: () => void;
-  onConverge?: () => void;
+  onConverge?: (matches?: CrossTreeMatch[]) => void;
 }
 
 // Direction-aware effective type helper (same logic as EditPanel)
@@ -199,6 +199,8 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
 
   // ── Step 1: save identity + media ──────────────────────────────
   async function saveIdentity() {
+    // Annuler le debounce d'auto-save pour éviter une race condition
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     setBusy(true);
     setError(null);
     try {
@@ -656,7 +658,7 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
                   personName={form.firstName || person?.firstName || ""}
                   matches={crossTreeMatches}
                   onDismiss={onClose}
-                  onConverge={onConverge ? () => { onClose(); onConverge(); } : undefined}
+                  onConverge={onConverge ? () => { onClose(); onConverge(crossTreeMatches); } : undefined}
                 />
                 <button
                   onClick={onClose}
