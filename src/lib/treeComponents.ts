@@ -77,6 +77,42 @@ export function computeComponents(
   return components;
 }
 
+/**
+ * Returns the Set of personIds in the connected component containing personId.
+ * Falls back to all persons if personId not found.
+ */
+export function computeDirectComponent(
+  persons: Person[],
+  relationships: Relationship[],
+  personId: string,
+): Set<string> {
+  const comps = computeComponents(persons, relationships);
+  const found = comps.find((c) => c.personIds.has(personId));
+  return found?.personIds ?? new Set(persons.map((p) => p.id));
+}
+
+/**
+ * Computes the tab label for a tree: two most common last names among
+ * the oldest (root) generation — persons with no parent linked in this tree.
+ */
+export function computeTreeTabName(persons: Person[], relationships: Relationship[]): string {
+  const hasParent = new Set(
+    relationships.filter((r) => r.type === "parent").map((r) => r.personBId),
+  );
+  const rootGen = persons.filter((p) => !hasParent.has(p.id));
+  const candidates = rootGen.length > 0 ? rootGen : persons;
+
+  const freq = new Map<string, number>();
+  for (const p of candidates) {
+    const n = (p.lastName ?? "").trim();
+    if (!n) continue;
+    freq.set(n, (freq.get(n) ?? 0) + 1);
+  }
+  const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
+  const top = [...new Set(sorted.map(([name]) => name))].slice(0, 2);
+  return top.length === 0 ? "Arbre" : top.join(" · ");
+}
+
 // ── Nom par défaut ────────────────────────────────────────────────
 
 function _defaultName(members: Person[]): string {
