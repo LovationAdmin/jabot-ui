@@ -17,13 +17,13 @@ import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { invitationsApi, setActiveTreeId, personsApi } from "@/lib/api";
 import { useTreeSync } from "@/lib/useTreeSync";
-import { computeComponents } from "@/lib/treeComponents";
-import { useTabNames } from "@/lib/useTabNames";
+import { computeDirectComponent, computeTreeTabName } from "@/lib/treeComponents";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
 import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
 import { ancestorsOf, descendantsOf } from "@/lib/lineage";
-import { LogIn, TreePine, Plus, Search, X } from "lucide-react";
+import { LogIn, TreePine, Plus, Search, X, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,13 +42,12 @@ type FormState = { mode: "create" | "edit"; person?: Person | null } | null;
 function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson, fitPending, clearFitPending, refreshDuplicateCount } = useFamilyTreeStore();
-  const { isAuthenticated, onboarded, personId, userId, logout, activeTreeId } = useAuthStore();
+  const { isAuthenticated, onboarded, personId, userId, activeTreeId, treeAccesses } = useAuthStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
   const [lineage, setLineage] = useState<{ rootId: string; dir: "ancestors" | "descendants" } | null>(null);
-  // Onglet de composante active (null = pas encore calculé, utilise la 1re).
-  const [activeComponentId, setActiveComponentId] = useState<string | null>(null);
+  const [showExtended, setShowExtended] = useState(false);
   const [form, setForm] = useState<FormState>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -101,7 +100,10 @@ function JabotCanvas() {
 
   useEffect(() => {
     if (visitorAllowed) loadTree();
-  }, [loadTree, visitorAllowed]);
+  }, [loadTree, visitorAllowed, activeTreeId]);
+
+  // Reset famille étendue quand on change d'arbre.
+  useEffect(() => { setShowExtended(false); }, [activeTreeId]);
 
   // Recalcule le nombre de doublons a examiner apres chaque (re)chargement de
   // l'arbre actif. Reserve aux utilisateurs rattaches (les visiteurs n'ont pas
@@ -302,39 +304,26 @@ function JabotCanvas() {
     setPan({ x: (viewport.w - treeW * z) / 2 - minX * z, y: (viewport.h - treeH * z) / 2 - minY * z });
   };
 
-  // ── Composantes connexes (multi-arbres) ──────────────────────────
-  const treeComponents = computeComponents(tree.persons, tree.relationships);
-  const { getTabName, rename: renameTab } = useTabNames();
+  // ── Famille directe vs étendue ───────────────────────────────────
+  const directPersonIds = personId
+    ? computeDirectComponent(tree.persons, tree.relationships, personId)
+    : new Set(tree.persons.map((p) => p.id));
 
-  // Active la première composante par défaut, ou si la composante active
-  // disparaît (fusion de deux arbres).
-  const effectiveComponentId =
-    activeComponentId && treeComponents.some((c) => c.id === activeComponentId)
-      ? activeComponentId
-      : treeComponents[0]?.id ?? null;
+  const visiblePersons = showExtended
+    ? tree.persons
+    : tree.persons.filter((p) => directPersonIds.has(p.id));
 
-  const activeComponent = treeComponents.find((c) => c.id === effectiveComponentId) ?? null;
+  const visiblePersonIdSet = new Set(visiblePersons.map((p) => p.id));
+  const visibleRelationships = tree.relationships.filter(
+    (r) => visiblePersonIdSet.has(r.personAId) && visiblePersonIdSet.has(r.personBId),
+  );
 
-  // Filtre les personnes et relations de la composante active.
-  const visiblePersons = activeComponent
-    ? tree.persons.filter((p) => activeComponent.personIds.has(p.id))
-    : tree.persons;
-  const visibleRelationships = activeComponent
-    ? tree.relationships.filter(
-        (r) => activeComponent.personIds.has(r.personAId) && activeComponent.personIds.has(r.personBId),
-      )
-    : tree.relationships;
-
-  // Quand on change d'onglet : reset le pan/zoom et la sélection.
-  function switchComponent(id: string) {
-    if (id === effectiveComponentId) return;
-    setActiveComponentId(id);
-    setSelectedId(null);
-    setLineage(null);
-    setSurnameFilter(new Set());
-    setZoom(isMobile ? 0.45 : 1);
-    setPan({ x: 80, y: 60 });
-  }
+  // ── Onglets par arbre (treeAccesses) ─────────────────────────────
+  const treeTabLabel = computeTreeTabName(tree.persons, tree.relationships);
+  const treeTabs = treeAccesses.map((a) => ({
+    id: a.treeId,
+    label: a.treeId === activeTreeId ? treeTabLabel : (a.treeName || "Arbre"),
+  }));
 
   const familyColors = computeFamilyColors(visiblePersons, visibleRelationships);
 
@@ -456,6 +445,21 @@ function JabotCanvas() {
                 <Search className="size-3.5" />
                 <span className="hidden sm:block">Rechercher</span>
               </button>
+              {isAuthenticated && personId && (
+                <button
+                  onClick={() => setShowExtended((v) => !v)}
+                  title={showExtended ? "Masquer la famille étendue" : "Afficher la famille étendue"}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors",
+                    showExtended
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Users className="size-3.5" />
+                  <span className="hidden sm:block">{showExtended ? "Famille étendue" : "Famille directe"}</span>
+                </button>
+              )}
               <button
                 onClick={() => setForm({ mode: "create" })}
                 className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -486,13 +490,11 @@ function JabotCanvas() {
         </div>
       </header>
 
-      {/* Onglets multi-arbres — visible uniquement si 2+ composantes connexes */}
+      {/* Onglets multi-arbres — visible uniquement si 2+ arbres */}
       <TreeTabs
-        components={treeComponents}
-        activeId={effectiveComponentId ?? ""}
-        getTabName={getTabName}
-        onSelect={switchComponent}
-        onRename={renameTab}
+        trees={treeTabs}
+        activeId={activeTreeId ?? ""}
+        onSelect={(id) => { useAuthStore.getState().setActiveTree(id); }}
       />
 
       <main className="relative flex flex-1 overflow-hidden">
@@ -681,6 +683,7 @@ function JabotCanvas() {
                   lineageDir={lineage?.rootId === p.id ? lineage.dir : null}
                   onToggleAncestors={(id) => toggleLineage(id, "ancestors")}
                   onToggleDescendants={(id) => toggleLineage(id, "descendants")}
+                  isExtended={showExtended && !directPersonIds.has(p.id)}
                 />
               ))}
             </div>

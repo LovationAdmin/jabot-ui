@@ -22,11 +22,13 @@ interface PersonCardProps {
   // Bascule la surbrillance des ascendants / descendants depuis les flèches.
   onToggleAncestors?: (id: string) => void;
   onToggleDescendants?: (id: string) => void;
+  // Famille étendue : hors de la composante directe de l'utilisateur.
+  isExtended?: boolean;
 }
 
 export function PersonCard({
   person, selected, onSelect, isAuthenticated = false, familyColor, surnameColor, highlight,
-  lineageDir, onToggleAncestors, onToggleDescendants,
+  lineageDir, onToggleAncestors, onToggleDescendants, isExtended = false,
 }: PersonCardProps) {
   const isDeceased = !!person.deathDate;
   const photo = person.photos[0];
@@ -62,6 +64,7 @@ export function PersonCard({
         highlight === "ancestor" && "z-10 -translate-y-0.5 ring-2 ring-amber-400 shadow-float",
         highlight === "descendant" && "z-10 -translate-y-0.5 ring-2 ring-sky-400 shadow-float",
         highlight === "dim" && "opacity-30 grayscale",
+        isExtended && "opacity-50 border-dashed",
       )}
     >
       {/* Bandeau nom de famille : identification rapide de la lignée. */}
