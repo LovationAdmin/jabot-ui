@@ -384,6 +384,11 @@ export const mergeRequestsApi = {
     const { data } = await apiClient.post(`/merge-requests/${requestId}/reject`);
     return mapMergeRequest(data);
   },
+
+  listAll: async (): Promise<MergeRequest[]> => {
+    const { data } = await apiClient.get<unknown[]>("/merge-requests/mine");
+    return (data ?? []).map((r) => mapMergeRequest(r as Parameters<typeof mapMergeRequest>[0]));
+  },
 };
 
 // ─── Tree ────────────────────────────────────────────────────────
