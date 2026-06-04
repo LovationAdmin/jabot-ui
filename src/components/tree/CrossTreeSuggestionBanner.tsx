@@ -21,9 +21,10 @@ interface Props {
   personName: string;
   matches: CrossTreeMatch[];
   onDismiss: () => void;
+  onConverge?: () => void;
 }
 
-export function CrossTreeSuggestionBanner({ personName, matches, onDismiss }: Props) {
+export function CrossTreeSuggestionBanner({ personName, matches, onDismiss, onConverge }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   if (!matches.length) return null;
@@ -114,13 +115,22 @@ export function CrossTreeSuggestionBanner({ personName, matches, onDismiss }: Pr
       )}
 
       {/* Call to action */}
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Si c'est la même personne, vous pouvez la fusionner via{" "}
-        <span className="inline-flex items-center gap-0.5 font-medium text-foreground">
-          <GitMerge className="size-3" /> Relier mon arbre
-        </span>
-        {" "}depuis l'arbre concerné.
-      </p>
+      {onConverge ? (
+        <button
+          onClick={onConverge}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <GitMerge className="size-4" /> Relier mon arbre
+        </button>
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Si c'est la même personne, reliez vos arbres via{" "}
+          <span className="inline-flex items-center gap-0.5 font-medium text-foreground">
+            <GitMerge className="size-3" /> Relier mon arbre
+          </span>
+          {" "}dans le menu compte.
+        </p>
+      )}
     </div>
   );
 }

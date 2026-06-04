@@ -40,6 +40,7 @@ interface Props {
   mode: "create" | "edit";
   person?: Person | null;
   onClose: () => void;
+  onConverge?: () => void;
 }
 
 // Direction-aware effective type helper (same logic as EditPanel)
@@ -60,7 +61,7 @@ const SIBLING_TYPES = new Set(["sibling", "half_sibling", "step_sibling"]);
 
 // ─── Main component ────────────────────────────────────────────────
 
-export function PersonFormDialog({ mode, person, onClose }: Props) {
+export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
   const { tree, addPerson, updatePerson, deletePerson, addRelationship, deleteRelationship, loadTree, requestFitTree } = useFamilyTreeStore();
 
   const [step, setStep] = useState<Step>("identity");
@@ -164,8 +165,31 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const field = (k: keyof typeof form, v: string | boolean) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const field = (k: keyof typeof form, v: string | boolean) => {
+    setForm((f) => {
+      const next = { ...f, [k]: v };
+      // Live save in edit mode: debounce 1.5s on text fields
+      if (mode === "edit" && person && typeof v === "string") {
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = setTimeout(async () => {
+          try {
+            const updated = await personsApi.update(person.id, {
+              firstName: next.firstName.trim(),
+              lastName: next.lastName.trim() || undefined,
+              nicknames: next.nickname.trim() ? [next.nickname.trim()] : [],
+              cityOfOrigin: next.cityOfOrigin.trim() || undefined,
+              birthDate: next.birthDate || undefined,
+              deathDate: next.isDeceased && next.deathDate ? next.deathDate : undefined,
+            });
+            updatePerson(person.id, updated);
+          } catch { /* silencieux — l'utilisateur peut encore sauvegarder manuellement */ }
+        }, 1500);
+      }
+      return next;
+    });
+  };
 
   function goTo(next: Step, dir: "forward" | "back") {
     setDirection(dir);
@@ -632,6 +656,7 @@ export function PersonFormDialog({ mode, person, onClose }: Props) {
                   personName={form.firstName || person?.firstName || ""}
                   matches={crossTreeMatches}
                   onDismiss={onClose}
+                  onConverge={onConverge ? () => { onClose(); onConverge(); } : undefined}
                 />
                 <button
                   onClick={onClose}

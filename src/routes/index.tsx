@@ -739,7 +739,7 @@ function JabotCanvas() {
       </main>
 
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
-      {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} />}
+      {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} onConverge={() => { setForm(null); setConvergeOpen(true); }} />}
       {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}
       {exportOpen && (
         <ExportDialog
