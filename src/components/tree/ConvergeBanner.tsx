@@ -249,11 +249,23 @@ export function ConvergeBanner() {
             {step === "review" && (
               <div className="flex flex-col gap-0">
                 <div className="px-6 pt-5 pb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users className="size-4 text-primary" />
-                    <span className="text-sm font-medium text-foreground">
-                      {pairs.length} correspondance{pairs.length > 1 ? "s" : ""} détectée{pairs.length > 1 ? "s" : ""}
-                    </span>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">
+                        {pairs.length} correspondance{pairs.length > 1 ? "s" : ""} détectée{pairs.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const all: Record<string, boolean> = {};
+                        for (const p of pairs) all[p.sourcePersonId] = true;
+                        setConfirmed(all);
+                      }}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Tout confirmer
+                    </button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Ces fiches semblent être les mêmes personnes dans les deux arbres.
@@ -318,16 +330,16 @@ export function ConvergeBanner() {
 
                 <div className="flex gap-2 px-6 py-4">
                   <button
-                    onClick={handleSkipToConfirm}
+                    onClick={() => { setConfirmed({}); setStep("confirm"); }}
                     className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
                   >
-                    Ignorer
+                    Aucune fusion
                   </button>
                   <button
                     onClick={handleSkipToConfirm}
                     className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
-                    Valider ({confirmedCount})
+                    Confirmer ({confirmedCount})
                     <ChevronRight className="size-4" />
                   </button>
                 </div>
