@@ -448,7 +448,7 @@ function JabotCanvas() {
                 <Search className="size-3.5" />
                 <span className="hidden sm:block">Rechercher</span>
               </button>
-              {isAuthenticated && personId && (
+              {isAuthenticated && (
                 <button
                   onClick={() => setShowExtended((v) => !v)}
                   title={showExtended ? "Masquer la famille étendue" : "Afficher la famille étendue"}
