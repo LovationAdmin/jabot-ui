@@ -104,14 +104,14 @@ export function AccountMenu({ onEditMyCard, onInvite, onConverge }: Props) {
               </button>
             )}
             {/* Relier mon arbre : visible dès que l'utilisateur possède un autre arbre */}
-            {ownedOtherTree && onConverge && (
+            {onConverge && (
               <button
                 onClick={() => { setOpen(false); onConverge(); }}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-primary transition-colors hover:bg-primary/10"
               >
                 <GitMerge className="size-4" />
                 <span className="flex-1 text-left">Relier mon arbre</span>
-                <span className="text-[10px] text-muted-foreground truncate max-w-[6rem]">{ownedOtherTree.treeName}</span>
+                {ownedOtherTree && <span className="text-[10px] text-muted-foreground truncate max-w-[6rem]">{ownedOtherTree.treeName}</span>}
               </button>
             )}
             {onInvite && (
