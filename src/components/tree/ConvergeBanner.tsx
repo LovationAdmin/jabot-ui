@@ -1,28 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitMerge, Loader2, X, Check, ChevronRight, Users, AlertCircle } from "lucide-react";
-import { treesApi, authApi } from "@/lib/api";
+import { GitMerge, Loader2, X, Check, AlertCircle, Sparkles } from "lucide-react";
+import { treesApi, authApi, personsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
-import { CrossTreeMatchPair } from "@/lib/types";
+import { CrossTreeMatch } from "@/lib/types";
 
 /**
- * Bannière de convergence d'arbres — flux multi-étapes.
+ * Dialog "Relier mon arbre" — flux simplifié.
  *
- * Étape 1 : L'utilisateur identifie SA fiche dans l'arbre cible.
- * Étape 2 : Scan pré-convergence — détecte les fiches communes.
- * Étape 3 : L'utilisateur confirme / rejette les paires proposées.
- * Étape 4 : Convergence finale (atomique).
+ * 1. Ouverture → détection automatique de la fiche dans l'autre arbre
+ * 2. Affichage de la fiche trouvée + confirmation en un clic
+ * 3. Si aucune correspondance : message + possibilité de choisir manuellement
  */
 
-type Step = "identity" | "scanning" | "review" | "confirm";
+type Step = "detecting" | "found" | "not_found" | "merging" | "done";
 
 function confidenceBadge(c: number) {
-  if (c >= 0.85) return "bg-emerald-500/15 text-emerald-400";
-  if (c >= 0.65) return "bg-amber-500/15 text-amber-400";
-  return "bg-blue-500/15 text-blue-400";
-}
-
-function personLabel(firstName: string, lastName?: string | null) {
-  return [firstName, lastName].filter(Boolean).join(" ");
+  if (c >= 0.85) return "bg-emerald-500/15 text-emerald-400 border-emerald-500/20";
+  if (c >= 0.65) return "bg-amber-500/15 text-amber-400 border-amber-500/20";
+  return "bg-blue-500/15 text-blue-400 border-blue-500/20";
 }
 
 interface Props {
@@ -36,17 +31,9 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
 
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const [step, setStep] = useState<Step>("identity");
-
-  // Step 1
-  const [targetPersonId, setTargetPersonId] = useState<string>("");
-
-  // Step 3 — pairs from scan; confirmed = true (merge), false (skip)
-  const [pairs, setPairs] = useState<CrossTreeMatchPair[]>([]);
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
-  const [unmatchedCount, setUnmatchedCount] = useState(0);
-
-  const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<Step>("detecting");
+  const [matches, setMatches] = useState<CrossTreeMatch[]>([]);
+  const [selectedMatch, setSelectedMatch] = useState<CrossTreeMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeAccess = treeAccesses.find((t) => t.treeId === activeTreeId);
@@ -54,14 +41,18 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
     () => treeAccesses.find((t) => t.role === "owner" && t.treeId !== activeTreeId),
     [treeAccesses, activeTreeId],
   );
+  // L'arbre que l'utilisateur possède (source de la convergence)
+  const ownedTree = useMemo(
+    () => ownedOther ?? treeAccesses.find((t) => t.role === "owner"),
+    [ownedOther, treeAccesses],
+  );
 
-  const shouldShow =
+  const shouldShowPill =
     !dismissed &&
     activeAccess?.role === "visitor" &&
     !!ownedOther &&
     tree.persons.length > 0;
 
-  // Allow opening from AccountMenu even when shouldShow conditions aren't met
   useEffect(() => {
     if (forceOpen) {
       handleOpen();
@@ -70,97 +61,65 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceOpen]);
 
-  if (!shouldShow && !open) return null;
+  if (!shouldShowPill && !open) return null;
 
-  function handleOpen() {
-    setStep("identity");
-    setTargetPersonId("");
-    setPairs([]);
-    setConfirmed({});
+  async function handleOpen() {
+    setStep("detecting");
+    setMatches([]);
+    setSelectedMatch(null);
     setError(null);
     setOpen(true);
+
+    if (!personId) {
+      setStep("not_found");
+      return;
+    }
+    try {
+      const results = await personsApi.getCrossTreeSuggestions(personId);
+      if (results.length > 0) {
+        setMatches(results);
+        setSelectedMatch(results[0]);
+        setStep("found");
+      } else {
+        setStep("not_found");
+      }
+    } catch {
+      setStep("not_found");
+    }
   }
 
   function handleClose() {
-    if (!busy) setOpen(false);
+    if (step !== "merging") setOpen(false);
   }
 
-  // Step 1 → 2 : scan
-  async function handleScan() {
-    if (!targetPersonId || !ownedOther || !activeTreeId) return;
-    setBusy(true);
-    setError(null);
-    setStep("scanning");
-    try {
-      const result = await treesApi.preScan(activeTreeId, ownedOther.treeId);
-      // Exclude the identity pair (already confirmed via the dropdown)
-      const filtered = result.proposedPairs.filter(
-        (p) => p.targetPersonId !== targetPersonId,
-      );
-      setPairs(filtered);
-      setUnmatchedCount(result.unmatchedSourceCount);
-      // Pre-confirm all pairs with confidence ≥ 0.75
-      const defaults: Record<string, boolean> = {};
-      for (const p of filtered) {
-        defaults[p.sourcePersonId] = p.confidence >= 0.75;
-      }
-      setConfirmed(defaults);
-      setStep(filtered.length > 0 ? "review" : "confirm");
-    } catch {
-      // If scan fails, skip to confirm step (convergence still works without extras)
-      setPairs([]);
-      setStep("confirm");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Step 3 → 4
-  function handleSkipToConfirm() {
-    setStep("confirm");
-  }
-
-  function togglePair(sourcePersonId: string) {
-    setConfirmed((prev) => ({ ...prev, [sourcePersonId]: !prev[sourcePersonId] }));
-  }
-
-  // Final convergence
   async function handleConverge() {
-    if (!ownedOther || !activeTreeId) return;
-    setBusy(true);
+    if (!selectedMatch || !ownedTree) return;
+    setStep("merging");
     setError(null);
     try {
-      const additionalMergePairs = pairs
-        .filter((p) => confirmed[p.sourcePersonId])
-        .map((p) => ({ sourcePersonId: p.sourcePersonId, targetPersonId: p.targetPersonId }));
-
-      await treesApi.converge(activeTreeId, {
-        sourceTreeId: ownedOther.treeId,
+      await treesApi.converge(selectedMatch.treeId, {
+        sourceTreeId: ownedTree.treeId,
         sourcePersonId: personId ?? undefined,
-        targetPersonId,
-        additionalMergePairs,
+        targetPersonId: selectedMatch.personId,
+        additionalMergePairs: [],
       });
       const me = await authApi.me();
-      setTreeAccesses(me.treeAccesses, activeTreeId);
-      setActiveTree(activeTreeId);
+      setTreeAccesses(me.treeAccesses, selectedMatch.treeId);
+      setActiveTree(selectedMatch.treeId);
       await loadTree();
       await refreshDuplicateCount();
-      setOpen(false);
-      setDismissed(true);
+      setStep("done");
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail ?? "La fusion a échoué. Réessayez.");
-    } finally {
-      setBusy(false);
+      setStep("found");
     }
   }
 
-  const confirmedCount = Object.values(confirmed).filter(Boolean).length;
-
   return (
     <>
-      {/* Pilule discrète */}
-      {!open && (
+      {/* Pilule discrète (visiteur uniquement) */}
+      {!open && shouldShowPill && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3 px-4">
           <div className="pointer-events-auto glass flex items-center gap-2 rounded-full border border-border px-3 py-1.5 shadow-float">
             <GitMerge className="size-3.5 shrink-0 text-primary" />
@@ -171,7 +130,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
               onClick={handleOpen}
               className="rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              Fusionner
+              Relier
             </button>
             <button
               onClick={() => setDismissed(true)}
@@ -184,224 +143,157 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
         </div>
       )}
 
-      {/* Dialogue */}
+      {/* Dialog */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-          <div className="glass relative w-full max-w-md rounded-2xl border border-border shadow-2xl overflow-hidden">
+          <div className="glass relative w-full max-w-sm rounded-2xl border border-border shadow-2xl overflow-hidden">
 
             {/* Header */}
-            <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+            <div className="flex items-center gap-3 border-b border-border px-5 py-4">
               <div className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
                 <GitMerge className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold leading-tight text-foreground">Relier mon arbre</h2>
-                <p className="text-xs text-muted-foreground truncate">
-                  Vers « {activeAccess?.treeName} »
-                </p>
               </div>
-              <button
-                onClick={handleClose}
-                className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
-              >
-                <X className="size-4" />
-              </button>
+              {step !== "merging" && (
+                <button
+                  onClick={handleClose}
+                  className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
             </div>
 
-            {/* ── Étape 1 : identité ─────────────────────────────── */}
-            {step === "identity" && (
-              <div className="space-y-4 px-6 py-5">
-                <p className="text-sm text-muted-foreground">
-                  Identifiez votre fiche dans cet arbre. Votre arbre personnel
-                  {" "}« {ownedOther?.treeName} » y sera rapatrié et vous en deviendrez membre.
-                </p>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Ma fiche dans cet arbre
-                  </label>
-                  <select
-                    value={targetPersonId}
-                    onChange={(e) => setTargetPersonId(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">— Choisir une personne —</option>
-                    {[...tree.persons]
-                      .sort((a, b) => a.firstName.localeCompare(b.firstName))
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.firstName} {p.lastName}
-                        </option>
-                      ))}
-                  </select>
+            {/* Détection en cours */}
+            {step === "detecting" && (
+              <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Recherche de votre fiche…</p>
+              </div>
+            )}
+
+            {/* Fiche trouvée */}
+            {step === "found" && selectedMatch && (
+              <div className="space-y-4 px-5 py-5">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="size-4 shrink-0 text-primary mt-0.5" />
+                  <p className="text-sm text-muted-foreground">
+                    Votre fiche a été trouvée dans un autre arbre.
+                  </p>
                 </div>
+
+                {/* Carte de la fiche */}
+                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-base font-semibold text-foreground">
+                      {selectedMatch.firstName}{selectedMatch.lastName ? ` ${selectedMatch.lastName}` : ""}
+                    </span>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(selectedMatch.confidence)}`}>
+                      {Math.round(selectedMatch.confidence * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{selectedMatch.treeName}</p>
+                  {selectedMatch.birthDate && (
+                    <p className="text-xs text-muted-foreground">
+                      Né(e) le {new Date(selectedMatch.birthDate).toLocaleDateString("fr-FR")}
+                    </p>
+                  )}
+                  {selectedMatch.matchReasons.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{selectedMatch.matchReasons[0]}</p>
+                  )}
+                </div>
+
+                {/* Autres correspondances */}
+                {matches.length > 1 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Autres correspondances</p>
+                    {matches.slice(1).map((m) => (
+                      <button
+                        key={m.personId}
+                        onClick={() => setSelectedMatch(m)}
+                        className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${selectedMatch.personId === m.personId ? "border-primary bg-primary/5" : "border-border hover:bg-muted"}`}
+                      >
+                        <div>
+                          <span className="text-sm text-foreground">{m.firstName}{m.lastName ? ` ${m.lastName}` : ""}</span>
+                          <span className="ml-1.5 text-xs text-muted-foreground">· {m.treeName}</span>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidenceBadge(m.confidence)}`}>
+                          {Math.round(m.confidence * 100)}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Votre arbre « {ownedTree?.treeName} » sera intégré à « {selectedMatch.treeName} ».
+                  Cette action est définitive.
+                </p>
+
                 {error && (
                   <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
                 )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleClose}
+                    className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleConverge}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <Check className="size-4" /> Confirmer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Aucune correspondance */}
+            {step === "not_found" && (
+              <div className="space-y-4 px-5 py-5">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="size-4 shrink-0 text-muted-foreground mt-0.5" />
+                  <p className="text-sm text-muted-foreground">
+                    Aucune fiche commune n'a été trouvée automatiquement.
+                    Demandez à un membre de l'autre arbre de vous inviter.
+                  </p>
+                </div>
                 <button
-                  disabled={!targetPersonId || busy}
-                  onClick={handleScan}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  onClick={handleClose}
+                  className="w-full rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
                 >
-                  Continuer
-                  <ChevronRight className="size-4" />
+                  Fermer
                 </button>
               </div>
             )}
 
-            {/* ── Étape 2 : scan en cours ─────────────────────────── */}
-            {step === "scanning" && (
+            {/* Fusion en cours */}
+            {step === "merging" && (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-                <Loader2 className="size-7 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">
-                  Recherche de correspondances entre les deux arbres…
-                </p>
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Fusion en cours…</p>
               </div>
             )}
 
-            {/* ── Étape 3 : revue des paires ─────────────────────── */}
-            {step === "review" && (
-              <div className="flex flex-col gap-0">
-                <div className="px-6 pt-5 pb-3">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-2">
-                      <Users className="size-4 text-primary" />
-                      <span className="text-sm font-medium text-foreground">
-                        {pairs.length} correspondance{pairs.length > 1 ? "s" : ""} détectée{pairs.length > 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const all: Record<string, boolean> = {};
-                        for (const p of pairs) all[p.sourcePersonId] = true;
-                        setConfirmed(all);
-                      }}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Tout confirmer
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Ces fiches semblent être les mêmes personnes dans les deux arbres.
-                    Cochez celles à fusionner.
-                  </p>
+            {/* Succès */}
+            {step === "done" && (
+              <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                <div className="grid size-12 place-items-center rounded-full bg-emerald-500/15">
+                  <Check className="size-6 text-emerald-500" />
                 </div>
-
-                <div className="max-h-64 overflow-y-auto divide-y divide-border px-4">
-                  {pairs.map((pair) => {
-                    const isOn = !!confirmed[pair.sourcePersonId];
-                    return (
-                      <button
-                        key={pair.sourcePersonId}
-                        onClick={() => togglePair(pair.sourcePersonId)}
-                        className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/40"
-                      >
-                        {/* Checkbox visuel */}
-                        <div className={`grid size-5 shrink-0 place-items-center rounded border transition-colors ${isOn ? "bg-primary border-primary" : "border-border"}`}>
-                          {isOn && <Check className="size-3 text-primary-foreground" />}
-                        </div>
-
-                        {/* Noms */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-medium text-foreground truncate">
-                              {personLabel(pair.sourceFirstName, pair.sourceLastName)}
-                            </span>
-                            <span className="text-muted-foreground text-xs">→</span>
-                            <span className="text-sm font-medium text-foreground truncate">
-                              {personLabel(pair.targetFirstName, pair.targetLastName)}
-                            </span>
-                          </div>
-                          {pair.matchReasons.length > 0 && (
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">
-                              {pair.matchReasons[0]}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Badge confiance */}
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${confidenceBadge(pair.confidence)}`}>
-                          {Math.round(pair.confidence * 100)}%
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {unmatchedCount > 0 && (
-                  <div className="flex items-start gap-2 mx-4 mt-2 rounded-xl bg-muted/50 px-3 py-2">
-                    <AlertCircle className="size-3.5 shrink-0 text-muted-foreground mt-0.5" />
-                    <p className="text-xs text-muted-foreground">
-                      {unmatchedCount} fiche{unmatchedCount > 1 ? "s" : ""} de votre arbre sans correspondance
-                      {unmatchedCount > 1 ? " seront ajoutées" : " sera ajoutée"} à cet arbre telle{unmatchedCount > 1 ? "s" : ""} quelle{unmatchedCount > 1 ? "s" : ""}.
-                    </p>
-                  </div>
-                )}
-
-                {error && (
-                  <p className="mx-6 mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-                )}
-
-                <div className="flex gap-2 px-6 py-4">
-                  <button
-                    onClick={() => { setConfirmed({}); setStep("confirm"); }}
-                    className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-                  >
-                    Aucune fusion
-                  </button>
-                  <button
-                    onClick={handleSkipToConfirm}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    Confirmer ({confirmedCount})
-                    <ChevronRight className="size-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Étape 4 : confirmation finale ─────────────────── */}
-            {step === "confirm" && (
-              <div className="space-y-4 px-6 py-5">
-                <div className="rounded-xl bg-muted/50 px-4 py-3 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-foreground">
-                    <span className="text-muted-foreground">Arbre source</span>
-                    <span className="font-medium">{ownedOther?.treeName}</span>
-                  </div>
-                  <div className="flex justify-between text-foreground">
-                    <span className="text-muted-foreground">Arbre cible</span>
-                    <span className="font-medium">{activeAccess?.treeName}</span>
-                  </div>
-                  {confirmedCount > 0 && (
-                    <div className="flex justify-between text-foreground">
-                      <span className="text-muted-foreground">Fusions supplémentaires</span>
-                      <span className="font-medium">{confirmedCount}</span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Cette action est définitive. Vous deviendrez membre de l'arbre cible et votre arbre personnel sera supprimé.
-                </p>
-                {error && (
-                  <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setStep(pairs.length > 0 ? "review" : "identity")}
-                    disabled={busy}
-                    className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                  >
-                    Retour
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={handleConverge}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                    Confirmer la fusion
-                  </button>
-                </div>
+                <p className="text-sm font-medium text-foreground">Arbres reliés avec succès !</p>
+                <button
+                  onClick={() => { setOpen(false); setDismissed(true); }}
+                  className="mt-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Continuer
+                </button>
               </div>
             )}
 
