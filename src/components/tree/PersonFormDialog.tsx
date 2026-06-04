@@ -69,6 +69,7 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
   const [savedId, setSavedId] = useState<string | null>(person?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [crossTreeMatches, setCrossTreeMatches] = useState<CrossTreeMatch[]>([]);
 
   // ── Step 1 form ────────────────────────────────────────────────
@@ -173,7 +174,9 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
       // Live save in edit mode: debounce 1.5s on text fields
       if (mode === "edit" && person && typeof v === "string") {
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        setAutoSaveState("idle");
         autoSaveTimer.current = setTimeout(async () => {
+          setAutoSaveState("saving");
           try {
             const updated = await personsApi.update(person.id, {
               firstName: next.firstName.trim(),
@@ -184,7 +187,10 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
               deathDate: next.isDeceased && next.deathDate ? next.deathDate : undefined,
             });
             updatePerson(person.id, updated);
-          } catch { /* silencieux — l'utilisateur peut encore sauvegarder manuellement */ }
+            setAutoSaveState("saved");
+          } catch {
+            setAutoSaveState("error");
+          }
         }, 1500);
       }
       return next;
@@ -332,7 +338,12 @@ export function PersonFormDialog({ mode, person, onClose, onConverge }: Props) {
             <h2 className="font-semibold text-foreground">
               {mode === "create" ? "Ajouter une personne" : "Modifier la fiche"}
             </h2>
-            <p className="text-xs text-muted-foreground">{STEP_LABELS[step]}</p>
+            <p className="text-xs text-muted-foreground">
+              {STEP_LABELS[step]}
+              {mode === "edit" && autoSaveState === "saving" && <span className="ml-2 text-muted-foreground">· Enregistrement…</span>}
+              {mode === "edit" && autoSaveState === "saved" && <span className="ml-2 text-emerald-500">· Enregistré</span>}
+              {mode === "edit" && autoSaveState === "error" && <span className="ml-2 text-destructive">· Échec de la sauvegarde</span>}
+            </p>
           </div>
           <div className="flex gap-1.5">
             {STEPS.map((s, i) => (

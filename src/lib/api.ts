@@ -130,6 +130,19 @@ export function mapPersonToCreateBody(person: Partial<Person>) {
   return body;
 }
 
+/** For updates: always include every field so blank values clear the DB column. */
+export function mapPersonToUpdateBody(person: Partial<Person>) {
+  return {
+    first_name: person.firstName ?? "",
+    last_name: person.lastName || null,
+    nicknames: person.nicknames ?? [],
+    gender: person.gender ? (person.gender === "other" ? "unknown" : person.gender) : undefined,
+    birth_date: person.birthDate || null,
+    death_date: person.deathDate || null,
+    city_of_origin: person.cityOfOrigin || null,
+  };
+}
+
 // ─── Auth & Onboarding ─────────────────────────────────────────────
 
 interface BackendTreeAccess {
@@ -376,7 +389,7 @@ export const personsApi = {
   },
 
   update: async (id: string, person: Partial<Person>): Promise<Person> => {
-    const { data } = await apiClient.put<PersonResponse>(`/persons/${id}`, mapPersonToCreateBody(person));
+    const { data } = await apiClient.put<PersonResponse>(`/persons/${id}`, mapPersonToUpdateBody(person));
     return mapPersonResponseToPerson(data);
   },
 
