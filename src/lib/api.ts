@@ -1,5 +1,5 @@
 import axios from "axios";
-import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess, OnboardMatch } from "./types";
+import { FamilyTree, MediaFile, Person, Relationship, SearchResult, TreeAccess, OnboardMatch, CrossTreeMatchPair } from "./types";
 import { apiBaseUrl } from "./config";
 import { uploadToCloudinary, compressImage, CloudinarySignature } from "./cloudinaryUpload";
 
@@ -250,21 +250,68 @@ export const treesApi = {
   remove: async (treeId: string): Promise<void> => {
     await apiClient.delete(`/trees/${treeId}`);
   },
+  // Scan pré-convergence : détecte les fiches communes entre les deux arbres.
+  preScan: async (
+    targetTreeId: string,
+    sourceTreeId: string,
+  ): Promise<{ proposedPairs: CrossTreeMatchPair[]; unmatchedSourceCount: number }> => {
+    const { data } = await apiClient.post<{
+      proposed_pairs: Array<{
+        source_person_id: string; source_first_name: string; source_last_name?: string;
+        target_person_id: string; target_first_name: string; target_last_name?: string;
+        confidence: number; match_reasons: string[]; match_stage: string;
+      }>;
+      unmatched_source_count: number;
+    }>(`/trees/${targetTreeId}/pre-converge-scan`, { source_tree_id: sourceTreeId });
+    return {
+      proposedPairs: (data.proposed_pairs ?? []).map((p) => ({
+        sourcePersonId: p.source_person_id,
+        sourceFirstName: p.source_first_name,
+        sourceLastName: p.source_last_name,
+        targetPersonId: p.target_person_id,
+        targetFirstName: p.target_first_name,
+        targetLastName: p.target_last_name,
+        confidence: p.confidence,
+        matchReasons: p.match_reasons,
+        matchStage: p.match_stage,
+      })),
+      unmatchedSourceCount: data.unmatched_source_count ?? 0,
+    };
+  },
+
   // Convergence : rapatrie l'arbre source (dont on est propriétaire) dans
-  // l'arbre cible (où l'on a été invité), en fusionnant la fiche d'identité.
+  // l'arbre cible (où l'on a été invité), en fusionnant la fiche d'identité
+  // et les paires supplémentaires confirmées par l'utilisateur.
   converge: async (
     targetTreeId: string,
-    params: { sourceTreeId: string; sourcePersonId?: string; targetPersonId?: string },
-  ): Promise<{ personsMoved: number; identityMerged: boolean }> => {
-    const { data } = await apiClient.post<{ persons_moved: number; identity_merged: boolean }>(
+    params: {
+      sourceTreeId: string;
+      sourcePersonId?: string;
+      targetPersonId?: string;
+      additionalMergePairs?: Array<{ sourcePersonId: string; targetPersonId: string }>;
+    },
+  ): Promise<{ personsMoved: number; identityMerged: boolean; additionalMerges: number }> => {
+    const { data } = await apiClient.post<{
+      persons_moved: number;
+      identity_merged: boolean;
+      additional_merges?: number;
+    }>(
       `/trees/${targetTreeId}/converge`,
       {
         source_tree_id: params.sourceTreeId,
         source_person_id: params.sourcePersonId,
         target_person_id: params.targetPersonId,
+        additional_merge_pairs: (params.additionalMergePairs ?? []).map((p) => ({
+          source_person_id: p.sourcePersonId,
+          target_person_id: p.targetPersonId,
+        })),
       },
     );
-    return { personsMoved: data.persons_moved, identityMerged: data.identity_merged };
+    return {
+      personsMoved: data.persons_moved,
+      identityMerged: data.identity_merged,
+      additionalMerges: data.additional_merges ?? 0,
+    };
   },
 };
 
