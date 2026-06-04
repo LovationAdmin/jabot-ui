@@ -63,7 +63,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled }: Props = {}) {
 
   // Allow opening from AccountMenu even when shouldShow conditions aren't met
   useEffect(() => {
-    if (forceOpen && ownedOther) {
+    if (forceOpen) {
       handleOpen();
       onForceOpenHandled?.();
     }

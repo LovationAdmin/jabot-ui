@@ -30,8 +30,8 @@ export function AccountMenu({ onEditMyCard, onInvite, onConverge }: Props) {
   const activeTree = treeAccesses.find((t) => t.treeId === activeTreeId);
   const hasMultipleTrees = treeAccesses.length > 1;
 
-  // "Relier mon arbre" : l'utilisateur possède un autre arbre et est visiteur ou membre de l'actif
-  const ownedOtherTree = treeAccesses.find((t) => t.role === "owner" && t.treeId !== activeTreeId);
+  // "Relier mon arbre" : visible dès que l'utilisateur a accès à plusieurs arbres
+  const ownedOtherTree = treeAccesses.find((t) => t.treeId !== activeTreeId);
 
   async function switchTree(treeId: string) {
     setActiveTree(treeId);
