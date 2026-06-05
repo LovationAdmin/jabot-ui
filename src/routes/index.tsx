@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Connectors } from "@/components/tree/Connectors";
 import { PersonCard } from "@/components/tree/PersonCard";
 import { EditPanel } from "@/components/tree/EditPanel";
@@ -19,6 +19,7 @@ import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { invitationsApi, setActiveTreeId, personsApi } from "@/lib/api";
 import { useTreeSync } from "@/lib/useTreeSync";
 import { computeDirectComponent, computeTreeTabName } from "@/lib/treeComponents";
+import { computeAutoLayout } from "@/lib/treeLayout";
 import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
 import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
@@ -288,7 +289,7 @@ function JabotCanvas() {
 
   // Zoom-to-fit : ajuste zoom + pan pour que tout l'arbre soit visible.
   const fitAll = () => {
-    const ps = visiblePersons.length > 0 ? visiblePersons : tree.persons;
+    const ps = personsWithLayout.length > 0 ? personsWithLayout : tree.persons;
     if (ps.length === 0) { centerSelf(); return; }
     const PADDING = 60;
     const CARD_W = 208;
@@ -319,6 +320,20 @@ function JabotCanvas() {
   const visiblePersonIdSet = new Set(visiblePersons.map((p) => p.id));
   const visibleRelationships = tree.relationships.filter(
     (r) => visiblePersonIdSet.has(r.personAId) && visiblePersonIdSet.has(r.personBId),
+  );
+
+  // ── Auto-layout : positions calculées côté client ────────────────
+  const autoPositions = useMemo(
+    () => computeAutoLayout(visiblePersons, visibleRelationships),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visiblePersons.map((p) => p.id).join(","), visibleRelationships.map((r) => r.id).join(",")],
+  );
+  const personsWithLayout = useMemo(
+    () => visiblePersons.map((p) => {
+      const pos = autoPositions.get(p.id);
+      return pos ? { ...p, position: pos } : p;
+    }),
+    [visiblePersons, autoPositions],
   );
 
   // ── Onglets par arbre (treeAccesses) ─────────────────────────────
@@ -375,7 +390,7 @@ function JabotCanvas() {
   };
 
   const centerOnPerson = (pid: string) => {
-    const p = getPersonById(pid) ?? tree.persons.find((x) => x.id === pid);
+    const p = personsWithLayout.find((x) => x.id === pid) ?? getPersonById(pid) ?? tree.persons.find((x) => x.id === pid);
     const wx = p?.position?.x ?? 0;
     const wy = p?.position?.y ?? 0;
     const z = isMobile ? 0.7 : 1;
@@ -661,7 +676,7 @@ function JabotCanvas() {
           )}
 
           {/* World */}
-          {!isLoading && visiblePersons.length > 0 && (
+          {!isLoading && personsWithLayout.length > 0 && (
             <div
               ref={worldRef}
               style={{
@@ -672,8 +687,8 @@ function JabotCanvas() {
               }}
               className="absolute left-0 top-0"
             >
-              <Connectors persons={visiblePersons} relationships={visibleRelationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
-              {visiblePersons.map((p) => (
+              <Connectors persons={personsWithLayout} relationships={visibleRelationships} width={WORLD.w} height={WORLD.h} familyColors={familyColors} />
+              {personsWithLayout.map((p) => (
                 <PersonCard
                   key={p.id}
                   person={p}
@@ -692,7 +707,7 @@ function JabotCanvas() {
             </div>
           )}
 
-          {visiblePersons.length > 0 && (
+          {personsWithLayout.length > 0 && (
             <SurnameLegend
               stats={surnameStats}
               activeFilter={surnameFilter}
@@ -703,9 +718,9 @@ function JabotCanvas() {
 
           <Toolbar onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
-          {visiblePersons.length > 0 && (
+          {personsWithLayout.length > 0 && (
             <MiniMap
-              persons={visiblePersons}
+              persons={personsWithLayout}
               selectedId={selectedId}
               viewport={{ x: pan.x, y: pan.y, w: viewport.w, h: viewport.h, zoom }}
               worldBounds={WORLD}

@@ -160,11 +160,10 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const startX = parents.length === 2 ? j.x : bottom(parents[0]).x;
     if (children.length === 1) {
       const ct = top(children[0]);
-      const my = (j.y + ct.y) / 2;
       paths.push(
         <path
           key={`fam-c-${fam.key}-${children[0].id}`}
-          d={`M ${startX} ${j.y} C ${startX} ${my}, ${ct.x} ${my}, ${ct.x} ${ct.y}`}
+          d={`M ${startX} ${j.y} L ${ct.x} ${j.y} L ${ct.x} ${ct.y}`}
           stroke={stroke}
           strokeWidth="2"
           fill="none"
@@ -214,7 +213,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
       paths.push(
         <path
           key={`sec-${pid}-${childId}`}
-          d={`M ${pb.x} ${pb.y} C ${pb.x} ${my}, ${ct.x} ${my}, ${ct.x} ${ct.y}`}
+          d={`M ${pb.x} ${pb.y} L ${pb.x} ${my} L ${ct.x} ${my} L ${ct.x} ${ct.y}`}
           stroke={relStroke(pid, childId, 0.45)}
           strokeWidth="1.5"
           strokeDasharray="2 4"
@@ -251,7 +250,7 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     paths.push(
       <path
         key={`spouse-${rel.id}`}
-        d={`M ${ca.x} ${ca.y} C ${mx} ${ca.y}, ${mx} ${cb.y}, ${cb.x} ${cb.y}`}
+        d={`M ${ca.x} ${ca.y} L ${cb.x} ${cb.y}`}
         stroke={spouseStroke}
         strokeWidth="1.5"
         strokeDasharray="5 3"
