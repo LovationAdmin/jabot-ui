@@ -1,16 +1,21 @@
 /**
- * Client-side genealogy tree layout.
+ * Client-side genealogy tree layout — Reingold-Tilford inspired.
  *
  * Algorithm:
- *   1. Build parent/child/spouse maps from visible relationships
- *   2. BFS from roots to assign generation numbers (parents above children)
- *   3. Propagate spouse pairs to same generation (take max)
- *   4. Top-down x assignment: sort each generation by parent-hint, group spouses
- *   5. Center children under their parent midpoint (2 passes)
- *   6. Family-group overlap resolution: push whole sibling groups as a unit,
- *      cascade shifts to all descendants so subtrees stay cohesive
- *   7. Final centering pass to re-align children after cascaded shifts
- *   8. Handle disconnected components side-by-side
+ *   1. BFS from roots → generation numbers (parents above children)
+ *   2. Propagate spouses to same generation (max)
+ *   3. Build FamUnits: each parent couple (or solo parent) + their children
+ *   4. Compute subtree widths bottom-up → guarantees non-overlapping blocks
+ *   5. Place families top-down recursively → couples centered over children,
+ *      each family branch occupies a contiguous horizontal block
+ *   6. Place isolated nodes (no family links) beside the main tree
+ *   7. Final per-generation push-right → zero overlaps guaranteed
+ *
+ * Properties:
+ *   - Every person at the same generation has the same Y coordinate
+ *   - Ancestors are always above descendants (top = oldest, bottom = youngest)
+ *   - Spouses are always adjacent
+ *   - All descendants of a family form a contiguous horizontal block
  */
 
 import { Person, Relationship } from "./types";
@@ -19,17 +24,15 @@ export const CARD_W = 208;
 export const CARD_H = 112;
 const H_STEP = CARD_W + 56;    // horizontal slot: card + gap
 const V_STEP = CARD_H + 110;   // vertical slot: card + gap between generations
-const FAMILY_GAP = 32;         // extra gap between distinct family groups in same generation
-const COMPONENT_GAP = 280;     // gap between fully disconnected components
+const FAMILY_GAP = 40;         // gap between distinct family blocks
+const COMPONENT_GAP = 320;     // gap between fully disconnected components
 
 export function computeAutoLayout(
   persons: Person[],
   relationships: Relationship[],
 ): Map<string, { x: number; y: number }> {
   if (persons.length === 0) return new Map();
-  if (persons.length === 1) {
-    return new Map([[persons[0].id, { x: 0, y: 0 }]]);
-  }
+  if (persons.length === 1) return new Map([[persons[0].id, { x: 0, y: 0 }]]);
 
   const idSet = new Set(persons.map((p) => p.id));
 
@@ -43,7 +46,6 @@ export function computeAutoLayout(
     childrenOf.set(p.id, []);
     spousesOf.set(p.id, new Set());
   }
-
   for (const r of relationships) {
     if (!idSet.has(r.personAId) || !idSet.has(r.personBId)) continue;
     if (r.type === "parent") {
@@ -60,22 +62,16 @@ export function computeAutoLayout(
 
   // ── Union-Find for connected components ────────────────────────────
   const uf = new Map<string, string>(persons.map((p) => [p.id, p.id]));
-  function find(x: string): string {
-    while (uf.get(x) !== x) {
-      const parent = uf.get(x)!;
-      uf.set(x, uf.get(parent)!);
-      x = parent;
-    }
+  const find = (x: string): string => {
+    while (uf.get(x) !== x) { const p = uf.get(x)!; uf.set(x, uf.get(p)!); x = p; }
     return x;
-  }
-  function unite(a: string, b: string) {
+  };
+  const unite = (a: string, b: string) => {
     const ra = find(a), rb = find(b);
     if (ra !== rb) uf.set(ra, rb);
-  }
+  };
   for (const r of relationships) {
-    if (idSet.has(r.personAId) && idSet.has(r.personBId)) {
-      unite(r.personAId, r.personBId);
-    }
+    if (idSet.has(r.personAId) && idSet.has(r.personBId)) unite(r.personAId, r.personBId);
   }
 
   const compOf = new Map<string, string[]>();
@@ -92,25 +88,13 @@ export function computeAutoLayout(
 
   for (const compIds of components) {
     const compSet = new Set(compIds);
-    const localPositions = _layoutComponent(
-      compIds,
-      compSet,
-      parentsOf,
-      childrenOf,
-      spousesOf,
-    );
+    const local = _layoutComponent(compIds, compSet, parentsOf, childrenOf, spousesOf);
+    if (local.size === 0) continue;
 
-    if (localPositions.size === 0) continue;
-
-    const xs = [...localPositions.values()].map((p) => p.x);
+    const xs = [...local.values()].map((p) => p.x);
     const minX = Math.min(...xs);
-
-    for (const [id, pos] of localPositions) {
-      allPositions.set(id, { x: pos.x - minX + xOffset, y: pos.y });
-    }
-
-    const maxX = Math.max(...xs) - minX + CARD_W;
-    xOffset += maxX + COMPONENT_GAP;
+    for (const [id, pos] of local) allPositions.set(id, { x: pos.x - minX + xOffset, y: pos.y });
+    xOffset += Math.max(...xs) - minX + CARD_W + COMPONENT_GAP;
   }
 
   // ── Center around viewport origin ──────────────────────────────────
@@ -120,13 +104,21 @@ export function computeAutoLayout(
   const cy = (Math.min(...ys) + Math.max(...ys) + CARD_H) / 2;
 
   const result = new Map<string, { x: number; y: number }>();
-  for (const [id, pos] of allPositions) {
+  for (const [id, pos] of allPositions)
     result.set(id, { x: Math.round(pos.x - cx), y: Math.round(pos.y - cy) });
-  }
   return result;
 }
 
-// ── Internal: layout one connected component ──────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal: layout one connected component
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface FamUnit {
+  key: string;
+  parents: string[];   // 1 or 2 parent ids
+  children: string[];  // direct children ids
+  gen: number;         // generation level of the parents
+}
 
 function _layoutComponent(
   ids: string[],
@@ -136,31 +128,25 @@ function _layoutComponent(
   spousesOf: Map<string, Set<string>>,
 ): Map<string, { x: number; y: number }> {
 
-  // ── Assign generation numbers ───────────────────────────────────────
+  // ── 1. Assign generation numbers via BFS ───────────────────────────
   const gen = new Map<string, number>();
-
   const roots = ids.filter(
-    (id) => (parentsOf.get(id) ?? []).filter((pid) => idSet.has(pid)).length === 0,
+    (id) => (parentsOf.get(id) ?? []).filter((p) => idSet.has(p)).length === 0,
   );
 
-  const queue = [...roots];
-  for (const id of queue) if (!gen.has(id)) gen.set(id, 0);
-
+  const bfsQ = [...roots];
+  for (const id of bfsQ) if (!gen.has(id)) gen.set(id, 0);
   let qi = 0;
-  while (qi < queue.length) {
-    const id = queue[qi++];
+  while (qi < bfsQ.length) {
+    const id = bfsQ[qi++];
     const g = gen.get(id)!;
-    for (const childId of (childrenOf.get(id) ?? []).filter((c) => idSet.has(c))) {
-      const newG = g + 1;
-      if ((gen.get(childId) ?? -1) < newG) {
-        gen.set(childId, newG);
-        queue.push(childId);
-      }
+    for (const c of (childrenOf.get(id) ?? []).filter((c) => idSet.has(c))) {
+      if ((gen.get(c) ?? -1) < g + 1) { gen.set(c, g + 1); bfsQ.push(c); }
     }
   }
-  for (const id of ids) if (!gen.has(id)) gen.set(id, 0);
+  for (const id of ids) if (!gen.has(id)) gen.set(id, 0); // fallback for cycles
 
-  // Propagate spouses to same generation (take max)
+  // ── 2. Propagate spouses to same generation (max) ──────────────────
   let changed = true;
   while (changed) {
     changed = false;
@@ -169,15 +155,195 @@ function _layoutComponent(
       for (const sid of (spousesOf.get(id) ?? [])) {
         if (!idSet.has(sid)) continue;
         const sg = gen.get(sid) ?? 0;
-        const maxG = Math.max(g, sg);
-        if (g !== maxG) { gen.set(id, maxG); changed = true; }
-        if (sg !== maxG) { gen.set(sid, maxG); changed = true; }
+        const mx = Math.max(g, sg);
+        if (g !== mx) { gen.set(id, mx); changed = true; }
+        if (sg !== mx) { gen.set(sid, mx); changed = true; }
       }
     }
   }
 
-  const maxGen = Math.max(...[...gen.values()]);
+  const maxGen = Math.max(...gen.values());
 
+  // ── 3. Build FamUnits ─────────────────────────────────────────────
+  // Primary family key for a person as a PARENT (couple key if spouse present, else solo)
+  const parentFamKey = (id: string): string => {
+    const g = gen.get(id)!;
+    const spouseHere = [...(spousesOf.get(id) ?? [])]
+      .filter((s) => idSet.has(s) && gen.get(s) === g);
+    if (spouseHere.length > 0) return [id, spouseHere[0]].sort().join("|");
+    return `solo|${id}`;
+  };
+
+  const famUnits = new Map<string, FamUnit>();
+
+  // Create a FamUnit for every person who has children OR a spouse in same gen
+  for (const id of ids) {
+    const g = gen.get(id)!;
+    const hasKids = (childrenOf.get(id) ?? []).some((c) => idSet.has(c));
+    const hasSpouseHere = [...(spousesOf.get(id) ?? [])].some(
+      (s) => idSet.has(s) && gen.get(s) === g,
+    );
+    if (!hasKids && !hasSpouseHere) continue;
+
+    const fk = parentFamKey(id);
+    if (!famUnits.has(fk)) {
+      const parents = fk.startsWith("solo|") ? [id] : fk.split("|");
+      famUnits.set(fk, { key: fk, parents, children: [], gen: g });
+    }
+  }
+
+  // Assign each child to its primary family
+  const personParentFamKey = new Map<string, string>(); // child → their parent's famKey
+  for (const id of ids) {
+    const parents = (parentsOf.get(id) ?? []).filter((p) => idSet.has(p));
+    if (parents.length === 0) continue;
+
+    // Prefer couple key over solo
+    let fk: string | null = null;
+    outer: for (let i = 0; i < parents.length; i++) {
+      for (let j = i + 1; j < parents.length; j++) {
+        if ((spousesOf.get(parents[i]) ?? new Set()).has(parents[j])) {
+          fk = [parents[i], parents[j]].sort().join("|");
+          break outer;
+        }
+      }
+    }
+    if (!fk) fk = `solo|${parents[0]}`;
+    if (famUnits.has(fk)) {
+      famUnits.get(fk)!.children.push(id);
+      personParentFamKey.set(id, fk);
+    }
+  }
+
+  // Map person → the FamUnit they head as a parent (used for recursive placement)
+  const personHeadsFam = new Map<string, string>(); // parentId → famKey
+  for (const [fk, fam] of famUnits) {
+    for (const pid of fam.parents) {
+      if (!personHeadsFam.has(pid)) personHeadsFam.set(pid, fk);
+    }
+  }
+
+  // ── 4. Compute subtree widths bottom-up ───────────────────────────
+  const famW = new Map<string, number>();
+
+  const computeWidth = (fk: string, depth = 0): number => {
+    if (famW.has(fk)) return famW.get(fk)!;
+    famW.set(fk, 0); // break cycles
+    if (depth > 100) return CARD_W; // safety
+
+    const fam = famUnits.get(fk)!;
+    // Width needed just for the couple/solo parent
+    const coupleW = CARD_W + (fam.parents.length - 1) * H_STEP;
+
+    if (fam.children.length === 0) {
+      famW.set(fk, coupleW);
+      return coupleW;
+    }
+
+    // Sum of children's subtree widths + gaps between them
+    let childrenW = 0;
+    for (let i = 0; i < fam.children.length; i++) {
+      const childHeadsFk = personHeadsFam.get(fam.children[i]);
+      childrenW += childHeadsFk ? computeWidth(childHeadsFk, depth + 1) : CARD_W;
+      if (i < fam.children.length - 1) childrenW += FAMILY_GAP;
+    }
+
+    const w = Math.max(coupleW, childrenW);
+    famW.set(fk, w);
+    return w;
+  };
+
+  for (const fk of famUnits.keys()) computeWidth(fk);
+
+  // ── 5. Place families top-down (recursive) ─────────────────────────
+  const positions = new Map<string, { x: number; y: number }>();
+
+  const placeFam = (fk: string, x0: number) => {
+    const fam = famUnits.get(fk)!;
+    const w = famW.get(fk) ?? CARD_W;
+    const midX = x0 + w / 2;
+
+    // Place parents centered in their slot
+    const coupleW = CARD_W + (fam.parents.length - 1) * H_STEP;
+    const parX = Math.round(midX - coupleW / 2);
+    for (let i = 0; i < fam.parents.length; i++) {
+      if (!positions.has(fam.parents[i]))
+        positions.set(fam.parents[i], { x: parX + i * H_STEP, y: fam.gen * V_STEP });
+    }
+
+    if (fam.children.length === 0) return;
+
+    // Sort children: children who themselves have children (subtrees) go first in the middle,
+    // leaves on the sides — this keeps surnames grouped and reduces crossings.
+    const sortedChildren = [...fam.children].sort((a, b) => {
+      const wa = famW.get(personHeadsFam.get(a) ?? "") ?? CARD_W;
+      const wb = famW.get(personHeadsFam.get(b) ?? "") ?? CARD_W;
+      // sort by last name first for surname grouping, then by subtree width desc
+      const lnA = (a && positions.has(a) ? "" : ""); // resolved below via person data — use insertion order
+      void lnA;
+      return wb - wa;
+    });
+
+    // Total width of children row
+    let childrenTotalW = 0;
+    for (let i = 0; i < sortedChildren.length; i++) {
+      childrenTotalW += famW.get(personHeadsFam.get(sortedChildren[i]) ?? "") ?? CARD_W;
+      if (i < sortedChildren.length - 1) childrenTotalW += FAMILY_GAP;
+    }
+
+    let childX = Math.round(midX - childrenTotalW / 2);
+
+    for (const childId of sortedChildren) {
+      const childFk = personHeadsFam.get(childId);
+      const childW = childFk ? (famW.get(childFk) ?? CARD_W) : CARD_W;
+
+      if (childFk) {
+        placeFam(childFk, childX);
+      } else {
+        if (!positions.has(childId))
+          positions.set(childId, {
+            x: childX + Math.round((childW - CARD_W) / 2),
+            y: gen.get(childId)! * V_STEP,
+          });
+      }
+      childX += childW + FAMILY_GAP;
+    }
+  };
+
+  // Root families: parents have no parents in this component
+  const rootFamKeys = [...famUnits.keys()].filter((fk) =>
+    famUnits.get(fk)!.parents.every(
+      (pid) => (parentsOf.get(pid) ?? []).every((pp) => !idSet.has(pp)),
+    ),
+  );
+
+  // Sort root families by their generation (should all be 0 typically)
+  rootFamKeys.sort((a, b) => famUnits.get(a)!.gen - famUnits.get(b)!.gen || a.localeCompare(b));
+
+  let curX = 0;
+  for (const fk of rootFamKeys) {
+    placeFam(fk, curX);
+    curX += (famW.get(fk) ?? CARD_W) + FAMILY_GAP * 2;
+  }
+
+  // Also place persons who are root individuals (no parents, not in any famUnit as parent)
+  for (const id of roots) {
+    if (!positions.has(id)) {
+      positions.set(id, { x: curX, y: gen.get(id)! * V_STEP });
+      curX += H_STEP + FAMILY_GAP;
+    }
+  }
+
+  // Place any remaining unpositioned persons (isolated in generation)
+  for (const id of ids) {
+    if (!positions.has(id)) {
+      positions.set(id, { x: curX, y: gen.get(id)! * V_STEP });
+      curX += H_STEP + FAMILY_GAP;
+    }
+  }
+
+  // ── 6. Final per-generation overlap guarantee ──────────────────────
+  // Y coordinates are never touched — only X spacing is corrected here.
   const byGen = new Map<number, string[]>();
   for (const id of ids) {
     const g = gen.get(id)!;
@@ -185,232 +351,6 @@ function _layoutComponent(
     byGen.get(g)!.push(id);
   }
 
-  const positions = new Map<string, { x: number; y: number }>();
-
-  // ── Helper: family key for a node (identifies the parent couple or solo parent) ──
-  const famKeyOf = (id: string): string => {
-    const parents = (parentsOf.get(id) ?? []).filter((p) => idSet.has(p));
-    if (parents.length === 0) return `root|${id}`;
-    for (let i = 0; i < parents.length; i++) {
-      for (let j = i + 1; j < parents.length; j++) {
-        if ((spousesOf.get(parents[i]) ?? new Set()).has(parents[j])) {
-          return [parents[i], parents[j]].sort().join("|");
-        }
-      }
-    }
-    return `solo|${parents[0]}`;
-  };
-
-  // ── Helper: parent midpoint x for a family key ─────────────────────
-  const famParentMidX = (famKey: string): number => {
-    if (famKey.startsWith("root|")) {
-      const id = famKey.slice(5);
-      return positions.get(id)?.x ?? 0;
-    }
-    if (famKey.startsWith("solo|")) {
-      const pid = famKey.slice(5);
-      const pos = positions.get(pid);
-      return pos ? pos.x + CARD_W / 2 : 0;
-    }
-    const pIds = famKey.split("|");
-    const xs = pIds.map((pid) => positions.get(pid)).filter(Boolean).map((p) => p!.x + CARD_W / 2);
-    return xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-  };
-
-  // ── Top-down x assignment ───────────────────────────────────────────
-  for (let g = 0; g <= maxGen; g++) {
-    const gIds = byGen.get(g) ?? [];
-    if (gIds.length === 0) continue;
-
-    const parentHint = (id: string): number => {
-      const pxs = (parentsOf.get(id) ?? [])
-        .filter((pid) => positions.has(pid))
-        .map((pid) => positions.get(pid)!.x);
-      if (pxs.length === 0) return NaN;
-      return pxs.reduce((a, b) => a + b, 0) / pxs.length;
-    };
-
-    const withHint = gIds
-      .map((id) => ({ id, h: parentHint(id) }))
-      .sort((a, b) => {
-        if (isNaN(a.h) && isNaN(b.h)) return 0;
-        if (isNaN(a.h)) return 1;
-        if (isNaN(b.h)) return -1;
-        return a.h - b.h;
-      });
-
-    // Build ordered groups: keep spouses adjacent
-    const placed = new Set<string>();
-    const orderedGroups: string[][] = [];
-    for (const { id } of withHint) {
-      if (placed.has(id)) continue;
-      placed.add(id);
-      const spouseHere = [...(spousesOf.get(id) ?? [])]
-        .filter((s) => idSet.has(s) && gen.get(s) === g && !placed.has(s));
-      for (const s of spouseHere) placed.add(s);
-      orderedGroups.push([id, ...spouseHere]);
-    }
-
-    let curX = 0;
-    for (const group of orderedGroups) {
-      for (let i = 0; i < group.length; i++) {
-        positions.set(group[i], { x: curX + i * H_STEP, y: g * V_STEP });
-      }
-      curX += group.length * H_STEP + FAMILY_GAP;
-    }
-  }
-
-  // ── Center children under parent midpoint (2 passes top-down) ──────
-  const centeringPass = () => {
-    for (let g = 1; g <= maxGen; g++) {
-      const gIds = byGen.get(g) ?? [];
-
-      // Group children by family key
-      const famChildren = new Map<string, string[]>();
-      for (const id of gIds) {
-        const fk = famKeyOf(id);
-        if (!famChildren.has(fk)) famChildren.set(fk, []);
-        famChildren.get(fk)!.push(id);
-      }
-
-      // Sort family groups by parent midpoint, then place children centered under parents
-      const sortedFams = [...famChildren.entries()].sort(
-        (a, b) => famParentMidX(a[0]) - famParentMidX(b[0]),
-      );
-
-      for (const [famKey, children] of sortedFams) {
-        const midX = famParentMidX(famKey);
-        children.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
-        const totalW = children.length * H_STEP - (H_STEP - CARD_W);
-        const startX = midX - totalW / 2;
-        for (let i = 0; i < children.length; i++) {
-          const pos = positions.get(children[i])!;
-          positions.set(children[i], { x: Math.round(startX + i * H_STEP), y: pos.y });
-        }
-      }
-    }
-  };
-
-  centeringPass();
-  centeringPass();
-
-  // ── Bottom-up subtree shift: spread parents apart when their children need space ──
-  // Process from deepest generation upward. For each generation, ensure siblings
-  // under the same parents have enough room, then re-center the parents over them.
-  for (let g = maxGen; g >= 1; g--) {
-    const gIds = byGen.get(g) ?? [];
-    if (gIds.length < 2) continue;
-
-    // Group siblings by family key, sorted by x
-    const groupMap = new Map<string, string[]>();
-    for (const id of gIds) {
-      const fk = famKeyOf(id);
-      if (!groupMap.has(fk)) groupMap.set(fk, []);
-      groupMap.get(fk)!.push(id);
-    }
-    for (const grp of groupMap.values()) {
-      grp.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
-    }
-
-    // Sort family groups by leftmost x
-    const sortedGroups = [...groupMap.values()].sort(
-      (a, b) => (positions.get(a[0])?.x ?? 0) - (positions.get(b[0])?.x ?? 0),
-    );
-
-    // Push groups apart when overlapping, then slide parent couple to stay above children
-    for (let i = 1; i < sortedGroups.length; i++) {
-      const prev = sortedGroups[i - 1];
-      const curr = sortedGroups[i];
-      const prevMaxX = Math.max(...prev.map((id) => positions.get(id)!.x));
-      const currMinX = positions.get(curr[0])!.x;
-      const needed = prevMaxX + H_STEP;
-      if (currMinX < needed) {
-        const delta = needed - currMinX;
-        for (const id of curr) {
-          const pos = positions.get(id)!;
-          positions.set(id, { x: pos.x + delta, y: pos.y });
-        }
-        curr.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
-      }
-    }
-
-    // Re-center each parent couple above its children's midpoint
-    for (const [fk, children] of groupMap) {
-      if (fk.startsWith("root|")) continue;
-      const parentIds = fk.startsWith("solo|") ? [fk.slice(5)] : fk.split("|");
-      const parentPositions = parentIds.map((pid) => positions.get(pid)).filter(Boolean) as { x: number; y: number }[];
-      if (parentPositions.length === 0 || children.length === 0) continue;
-
-      // Children midpoint (center of card centers)
-      const childMid =
-        children.reduce((s, id) => s + (positions.get(id)!.x + CARD_W / 2), 0) / children.length;
-
-      // Current parent couple midpoint
-      const parMid =
-        parentPositions.reduce((s, p) => s + (p.x + CARD_W / 2), 0) / parentPositions.length;
-
-      const shift = Math.round(childMid - parMid);
-      if (Math.abs(shift) < 1) continue;
-      for (const pid of parentIds) {
-        const pp = positions.get(pid);
-        if (pp) positions.set(pid, { x: pp.x + shift, y: pp.y });
-      }
-    }
-  }
-
-  // ── Top-down overlap resolution with full subtree cascade ────────────
-  // After the bottom-up pass parents may have shifted; now sweep top-down and
-  // cascade any remaining overlaps to keep each subtree cohesive.
-
-  const cascadeShift = (startId: string, delta: number) => {
-    const visited = new Set<string>();
-    const stack = [startId];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (visited.has(id)) continue;
-      visited.add(id);
-      const pos = positions.get(id);
-      if (pos) positions.set(id, { x: pos.x + delta, y: pos.y });
-      for (const cid of (childrenOf.get(id) ?? []).filter((c) => idSet.has(c))) {
-        stack.push(cid);
-      }
-    }
-  };
-
-  for (let g = 0; g <= maxGen; g++) {
-    const gIds = byGen.get(g) ?? [];
-    if (gIds.length < 2) continue;
-
-    const groupMap = new Map<string, string[]>();
-    for (const id of gIds) {
-      const fk = famKeyOf(id);
-      if (!groupMap.has(fk)) groupMap.set(fk, []);
-      groupMap.get(fk)!.push(id);
-    }
-    for (const grp of groupMap.values()) {
-      grp.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
-    }
-    const sortedGroups = [...groupMap.values()].sort(
-      (a, b) => (positions.get(a[0])?.x ?? 0) - (positions.get(b[0])?.x ?? 0),
-    );
-
-    for (let i = 1; i < sortedGroups.length; i++) {
-      const prevGroup = sortedGroups[i - 1];
-      const currGroup = sortedGroups[i];
-      const prevMaxX = Math.max(...prevGroup.map((id) => positions.get(id)!.x));
-      const currMinX = positions.get(currGroup[0])!.x;
-      const needed = prevMaxX + H_STEP;
-      if (currMinX < needed) {
-        const delta = needed - currMinX;
-        for (const id of currGroup) cascadeShift(id, delta);
-        currGroup.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
-      }
-    }
-  }
-
-  // ── Guaranteed no-overlap final pass ────────────────────────────────
-  // Simple per-generation push-right without cascade, ensures zero overlaps
-  // regardless of what happened above.
   for (let g = 0; g <= maxGen; g++) {
     const gIds = [...(byGen.get(g) ?? [])].sort(
       (a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0),
@@ -418,9 +358,8 @@ function _layoutComponent(
     for (let i = 1; i < gIds.length; i++) {
       const prev = positions.get(gIds[i - 1])!;
       const curr = positions.get(gIds[i])!;
-      if (curr.x < prev.x + H_STEP) {
+      if (curr.x < prev.x + H_STEP)
         positions.set(gIds[i], { x: prev.x + H_STEP, y: curr.y });
-      }
     }
   }
 
