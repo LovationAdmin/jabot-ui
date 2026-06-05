@@ -701,7 +701,7 @@ function JabotCanvas() {
             />
           )}
 
-          <Toolbar zoom={zoom} onZoomIn={() => zoomBy(1.15)} onZoomOut={() => zoomBy(1 / 1.15)} onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
+          <Toolbar onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
           {visiblePersons.length > 0 && (
             <MiniMap

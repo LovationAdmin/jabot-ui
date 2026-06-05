@@ -30,7 +30,6 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   const { tree } = useFamilyTreeStore();
 
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
   const [step, setStep] = useState<Step>("detecting");
   const [matches, setMatches] = useState<CrossTreeMatch[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<CrossTreeMatch | null>(null);
@@ -40,11 +39,6 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const activeAccess = treeAccesses.find((t) => t.treeId === activeTreeId);
-
-  const shouldShowPill =
-    !dismissed &&
-    !!activeTreeId &&
-    tree.persons.length > 0;
 
   useEffect(() => {
     if (forceOpen) {
@@ -67,7 +61,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
       .finally(() => setLoadingHistory(false));
   }, [open, tab, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!shouldShowPill && !open) return null;
+  if (!open) return null;
 
   async function handleOpen(injectedMatches?: CrossTreeMatch[]) {
     setStep("detecting");
@@ -150,34 +144,8 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
 
   return (
     <>
-      {/* Pilule discrète (visiteur uniquement) */}
-      {!open && shouldShowPill && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3 px-4">
-          <div className="pointer-events-auto glass flex items-center gap-2 rounded-full border border-border px-3 py-1.5 shadow-float">
-            <GitMerge className="size-3.5 shrink-0 text-primary" />
-            <span className="hidden text-sm text-muted-foreground sm:block">
-              Votre famille ? Reliez votre arbre à celui-ci
-            </span>
-            <button
-              onClick={() => handleOpen()}
-              className="rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              Relier
-            </button>
-            <button
-              onClick={() => setDismissed(true)}
-              className="grid size-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
-              aria-label="Ignorer"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Dialog */}
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
           <div className="glass relative w-full max-w-sm rounded-2xl border border-border shadow-2xl overflow-hidden">
 
@@ -346,7 +314,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
                       Voir le statut <ChevronRight className="size-3.5" />
                     </button>
                     <button
-                      onClick={() => { setOpen(false); setDismissed(true); }}
+                      onClick={() => { setOpen(false); }}
                       className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     >
                       Fermer
@@ -361,7 +329,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
                     </div>
                     <p className="text-sm font-medium text-foreground">Arbres reliés avec succès !</p>
                     <button
-                      onClick={() => { setOpen(false); setDismissed(true); }}
+                      onClick={() => { setOpen(false); }}
                       className="mt-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     >
                       Continuer
@@ -409,7 +377,6 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
 
           </div>
         </div>
-      )}
     </>
   );
 }
