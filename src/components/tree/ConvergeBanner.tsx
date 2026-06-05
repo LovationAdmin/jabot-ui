@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { GitMerge, Loader2, X, Check, AlertCircle, Sparkles, Clock, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { mergeRequestsApi, personsApi } from "@/lib/api";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
@@ -40,19 +40,10 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const activeAccess = treeAccesses.find((t) => t.treeId === activeTreeId);
-  const ownedOther = useMemo(
-    () => treeAccesses.find((t) => t.role === "owner" && t.treeId !== activeTreeId),
-    [treeAccesses, activeTreeId],
-  );
-  const ownedTree = useMemo(
-    () => ownedOther ?? treeAccesses.find((t) => t.role === "owner"),
-    [ownedOther, treeAccesses],
-  );
 
   const shouldShowPill =
     !dismissed &&
-    activeAccess?.role === "visitor" &&
-    !!ownedOther &&
+    !!activeTreeId &&
     tree.persons.length > 0;
 
   useEffect(() => {
@@ -86,28 +77,22 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
     setTab("new");
     setOpen(true);
 
-    // Vérifier s'il existe déjà une demande pending pour cet arbre source
-    if (ownedTree) {
+    // Vérifier s'il existe déjà une demande pending pour cet arbre
+    if (activeTreeId) {
       try {
         const existing = await mergeRequestsApi.listAll();
         const hasPending = existing.some(
-          (r) => r.sourceTreeId === ownedTree.treeId && r.status === "pending"
+          (r) => r.sourceTreeId === activeTreeId && r.status === "pending"
         );
         if (hasPending) {
           setMyRequests(existing.filter((r) => r.requestedByUserId === userId));
           setTab("history");
-          setStep("not_found"); // reset step (tab "history" ne l'utilise pas)
+          setStep("not_found");
           return;
         }
       } catch {
         // En cas d'erreur, continuer le flux normal
       }
-    }
-
-    if (!ownedTree) {
-      setError("Vous n'êtes propriétaire d'aucun arbre. Créez votre propre arbre avant de pouvoir relier.");
-      setStep("not_found");
-      return;
     }
 
     const preloaded = injectedMatches ?? preloadedMatches;
@@ -141,20 +126,16 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   }
 
   async function handleRequestMerge() {
-    if (!selectedMatch) return;
-    if (!ownedTree) {
-      setError("Vous devez être propriétaire d'un arbre pour envoyer une demande de fusion. Vous n'avez pas d'arbre en cours.");
-      return;
-    }
-    if (ownedTree.treeId === selectedMatch.treeId) {
-      setError("L'arbre source et l'arbre cible sont identiques.");
+    if (!selectedMatch || !activeTreeId) return;
+    if (activeTreeId === selectedMatch.treeId) {
+      setError("Vous êtes déjà dans cet arbre.");
       return;
     }
     setStep("requesting");
     setError(null);
     try {
       await mergeRequestsApi.create({
-        sourceTreeId: ownedTree.treeId,
+        sourceTreeId: activeTreeId,
         targetTreeId: selectedMatch.treeId,
         sourcePersonId: personId ?? undefined,
         targetPersonId: selectedMatch.personId,
@@ -298,7 +279,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
 
                     <p className="text-xs text-muted-foreground">
                       Une demande sera envoyée aux membres de « {selectedMatch.treeName} ».
-                      Dès qu'un d'eux l'approuve, votre arbre « {ownedTree?.treeName} » y sera intégré.
+                      Dès qu'un d'eux l'approuve, votre arbre « {activeAccess?.treeName} » y sera intégré.
                     </p>
 
                     {error && (
