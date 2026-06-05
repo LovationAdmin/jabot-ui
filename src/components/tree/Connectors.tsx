@@ -250,7 +250,9 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     paths.push(
       <path
         key={`spouse-${rel.id}`}
-        d={`M ${ca.x} ${ca.y} L ${cb.x} ${cb.y}`}
+        d={ca.y === cb.y
+          ? `M ${ca.x} ${ca.y} L ${cb.x} ${cb.y}`
+          : `M ${ca.x} ${ca.y} L ${ca.x} ${cb.y} L ${cb.x} ${cb.y}`}
         stroke={spouseStroke}
         strokeWidth="1.5"
         strokeDasharray="5 3"
@@ -295,13 +297,17 @@ export function Connectors({ persons, relationships, width = 4000, height = 3000
     const dashArray = rel.type === "half_sibling" ? "8 4"
       : rel.type === "step_sibling" ? "6 2 2 2"
       : undefined; // sibling: solid
+    const midY = Math.min(ca.y, cb.y);
     paths.push(
-      <line
+      <path
         key={`horiz-${rel.id}`}
-        x1={ca.x} y1={ca.y} x2={cb.x} y2={cb.y}
+        d={ca.y === cb.y
+          ? `M ${ca.x} ${ca.y} L ${cb.x} ${cb.y}`
+          : `M ${ca.x} ${ca.y} L ${ca.x} ${midY} L ${cb.x} ${midY} L ${cb.x} ${cb.y}`}
         stroke={hs}
         strokeWidth="1"
         strokeDasharray={dashArray}
+        fill="none"
       />
     );
   }

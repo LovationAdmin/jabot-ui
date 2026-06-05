@@ -294,9 +294,73 @@ function _layoutComponent(
   centeringPass();
   centeringPass();
 
-  // ── Family-group overlap resolution with subtree cascade ────────────
-  // Push whole sibling groups right as a unit; cascade shifts to descendants
-  // so that subtrees stay cohesive instead of being torn apart.
+  // ── Bottom-up subtree shift: spread parents apart when their children need space ──
+  // Process from deepest generation upward. For each generation, ensure siblings
+  // under the same parents have enough room, then re-center the parents over them.
+  for (let g = maxGen; g >= 1; g--) {
+    const gIds = byGen.get(g) ?? [];
+    if (gIds.length < 2) continue;
+
+    // Group siblings by family key, sorted by x
+    const groupMap = new Map<string, string[]>();
+    for (const id of gIds) {
+      const fk = famKeyOf(id);
+      if (!groupMap.has(fk)) groupMap.set(fk, []);
+      groupMap.get(fk)!.push(id);
+    }
+    for (const grp of groupMap.values()) {
+      grp.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
+    }
+
+    // Sort family groups by leftmost x
+    const sortedGroups = [...groupMap.values()].sort(
+      (a, b) => (positions.get(a[0])?.x ?? 0) - (positions.get(b[0])?.x ?? 0),
+    );
+
+    // Push groups apart when overlapping, then slide parent couple to stay above children
+    for (let i = 1; i < sortedGroups.length; i++) {
+      const prev = sortedGroups[i - 1];
+      const curr = sortedGroups[i];
+      const prevMaxX = Math.max(...prev.map((id) => positions.get(id)!.x));
+      const currMinX = positions.get(curr[0])!.x;
+      const needed = prevMaxX + H_STEP;
+      if (currMinX < needed) {
+        const delta = needed - currMinX;
+        for (const id of curr) {
+          const pos = positions.get(id)!;
+          positions.set(id, { x: pos.x + delta, y: pos.y });
+        }
+        curr.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
+      }
+    }
+
+    // Re-center each parent couple above its children's midpoint
+    for (const [fk, children] of groupMap) {
+      if (fk.startsWith("root|")) continue;
+      const parentIds = fk.startsWith("solo|") ? [fk.slice(5)] : fk.split("|");
+      const parentPositions = parentIds.map((pid) => positions.get(pid)).filter(Boolean) as { x: number; y: number }[];
+      if (parentPositions.length === 0 || children.length === 0) continue;
+
+      // Children midpoint (center of card centers)
+      const childMid =
+        children.reduce((s, id) => s + (positions.get(id)!.x + CARD_W / 2), 0) / children.length;
+
+      // Current parent couple midpoint
+      const parMid =
+        parentPositions.reduce((s, p) => s + (p.x + CARD_W / 2), 0) / parentPositions.length;
+
+      const shift = Math.round(childMid - parMid);
+      if (Math.abs(shift) < 1) continue;
+      for (const pid of parentIds) {
+        const pp = positions.get(pid);
+        if (pp) positions.set(pid, { x: pp.x + shift, y: pp.y });
+      }
+    }
+  }
+
+  // ── Top-down overlap resolution with full subtree cascade ────────────
+  // After the bottom-up pass parents may have shifted; now sweep top-down and
+  // cascade any remaining overlaps to keep each subtree cohesive.
 
   const cascadeShift = (startId: string, delta: number) => {
     const visited = new Set<string>();
@@ -317,47 +381,48 @@ function _layoutComponent(
     const gIds = byGen.get(g) ?? [];
     if (gIds.length < 2) continue;
 
-    // Group nodes by family key
     const groupMap = new Map<string, string[]>();
     for (const id of gIds) {
       const fk = famKeyOf(id);
       if (!groupMap.has(fk)) groupMap.set(fk, []);
       groupMap.get(fk)!.push(id);
     }
-
-    // Sort each group's members by x
     for (const grp of groupMap.values()) {
       grp.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
     }
-
-    // Sort groups by their leftmost member's x
     const sortedGroups = [...groupMap.values()].sort(
       (a, b) => (positions.get(a[0])?.x ?? 0) - (positions.get(b[0])?.x ?? 0),
     );
 
-    // Push groups right to resolve overlaps; cascade shifts to subtrees
     for (let i = 1; i < sortedGroups.length; i++) {
       const prevGroup = sortedGroups[i - 1];
       const currGroup = sortedGroups[i];
-
       const prevMaxX = Math.max(...prevGroup.map((id) => positions.get(id)!.x));
       const currMinX = positions.get(currGroup[0])!.x;
       const needed = prevMaxX + H_STEP;
-
       if (currMinX < needed) {
         const delta = needed - currMinX;
-        // Cascade shift: move the whole subtree rooted at each node in currGroup
-        for (const id of currGroup) {
-          cascadeShift(id, delta);
-        }
-        // Re-sort currGroup after shift so the next iteration compares correctly
+        for (const id of currGroup) cascadeShift(id, delta);
         currGroup.sort((a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0));
       }
     }
   }
 
-  // ── Final centering pass to re-align after cascade shifts ───────────
-  centeringPass();
+  // ── Guaranteed no-overlap final pass ────────────────────────────────
+  // Simple per-generation push-right without cascade, ensures zero overlaps
+  // regardless of what happened above.
+  for (let g = 0; g <= maxGen; g++) {
+    const gIds = [...(byGen.get(g) ?? [])].sort(
+      (a, b) => (positions.get(a)?.x ?? 0) - (positions.get(b)?.x ?? 0),
+    );
+    for (let i = 1; i < gIds.length; i++) {
+      const prev = positions.get(gIds[i - 1])!;
+      const curr = positions.get(gIds[i])!;
+      if (curr.x < prev.x + H_STEP) {
+        positions.set(gIds[i], { x: prev.x + H_STEP, y: curr.y });
+      }
+    }
+  }
 
   return positions;
 }
