@@ -229,12 +229,14 @@ interface EditPanelProps {
   onClose: () => void;
   onSelectPerson: (id: string) => void;
   isAuthenticated?: boolean;
+  // Peut modifier l'arbre (owner ou member). false pour les visiteurs (lecture seule).
+  canWrite?: boolean;
   onEdit?: (person: Person) => void;
 }
 
 export function EditPanel({
   person, allPersons, relationships, onClose, onSelectPerson,
-  isAuthenticated, onEdit,
+  isAuthenticated, canWrite = isAuthenticated, onEdit,
 }: EditPanelProps) {
   const { deleteRelationship, addRelationship, addPerson, loadTree, getPersonById, deletePerson, updatePerson } = useFamilyTreeStore();
 
@@ -287,6 +289,8 @@ export function EditPanel({
     try {
       await relationshipsApi.delete(relId);
       deleteRelationship(relId);
+    } catch {
+      alert("Impossible de dissocier ce lien. Réessayez ou rechargez la page.");
     } finally {
       setUnlinking(null);
     }
@@ -640,7 +644,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <ImageIcon className="size-3" /> Photos
                 </p>
-                {person.photos.length < 5 && (
+                {canWrite && person.photos.length < 5 && (
                   <>
                     <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                     <button
@@ -664,13 +668,15 @@ export function EditPanel({
                         onClick={() => setLightboxIndex(i)}
                         className="h-full w-full cursor-zoom-in rounded-xl object-cover"
                       />
-                      <button
-                        onClick={() => handleDeleteMedia(ph.id, "photo")}
-                        disabled={deletingMedia === ph.id}
-                        className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/50 text-white transition-colors hover:bg-destructive"
-                      >
-                        {deletingMedia === ph.id ? <Loader2 className="size-2.5 animate-spin" /> : <X className="size-2.5" />}
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => handleDeleteMedia(ph.id, "photo")}
+                          disabled={deletingMedia === ph.id}
+                          className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/50 text-white transition-colors hover:bg-destructive"
+                        >
+                          {deletingMedia === ph.id ? <Loader2 className="size-2.5 animate-spin" /> : <X className="size-2.5" />}
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -687,7 +693,7 @@ export function EditPanel({
                 <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Music className="size-3" /> Messages audio
                 </p>
-                {person.audios.length < 5 && (
+                {canWrite && person.audios.length < 5 && (
                   <div className="flex items-center gap-1">
                     <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioFileUpload} />
                     <button
@@ -722,13 +728,15 @@ export function EditPanel({
                           Audio {i + 1}{au.duration ? ` · ${Math.round(au.duration)}s` : ""}
                           {au.uploaderName && <span className="ml-1 opacity-70">· {au.uploaderName}</span>}
                         </span>
-                        <button
-                          onClick={() => handleDeleteMedia(au.id, "audio")}
-                          disabled={deletingMedia === au.id}
-                          className="grid size-5 place-items-center rounded-full text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
-                        >
-                          {deletingMedia === au.id ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
-                        </button>
+                        {canWrite && (
+                          <button
+                            onClick={() => handleDeleteMedia(au.id, "audio")}
+                            disabled={deletingMedia === au.id}
+                            className="grid size-5 place-items-center rounded-full text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+                          >
+                            {deletingMedia === au.id ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                          </button>
+                        )}
                       </div>
                       <audio controls src={au.url} className="w-full" style={{ height: "32px" }} />
                     </div>
@@ -771,7 +779,7 @@ export function EditPanel({
           {/* Tab content */}
           <div className="space-y-1.5 p-3">
             {/* État vide pour un groupe direct : invite à rattacher */}
-            {isAuthenticated
+            {canWrite
               && (groups[currentGroup]?.length ?? 0) === 0
               && directGroups.some((g) => g.key === currentGroup)
               && linkMode?.groupKey !== currentGroup && (
@@ -818,7 +826,7 @@ export function EditPanel({
                 </button>
 
                 {/* Bouton dissocier — seulement pour liens directs */}
-                {isAuthenticated && entry.relId && (
+                {canWrite && entry.relId && (
                   <button
                     onClick={() => handleUnlink(entry.relId!)}
                     disabled={unlinking === entry.relId}
@@ -832,12 +840,21 @@ export function EditPanel({
                     )}
                   </button>
                 )}
+                {/* Lien déduit : explication au survol */}
+                {canWrite && !entry.relId && (
+                  <div
+                    title="Lien calculé automatiquement — pour le supprimer, dissociez le lien parent direct dans la fiche concernée"
+                    className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground/30 cursor-help"
+                  >
+                    <Unlink className="size-3.5" />
+                  </div>
+                )}
               </div>
               );
             })}
 
             {/* Lier / créer une personne (auth + onglet direct) */}
-            {isAuthenticated && directGroups.some((g) => g.key === currentGroup) && (
+            {canWrite && directGroups.some((g) => g.key === currentGroup) && (
               <>
                 {linkMode?.groupKey === currentGroup ? (
                   <div className="mt-2 space-y-2 rounded-xl border border-border bg-background/50 p-3">
@@ -955,7 +972,7 @@ export function EditPanel({
       </div>
 
       {/* Actions */}
-      {isAuthenticated && (
+      {canWrite && (
         <div className="flex gap-2 p-4">
           <button
             onClick={() => onEdit?.(person)}

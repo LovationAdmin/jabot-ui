@@ -45,6 +45,8 @@ function JabotCanvas() {
   const navigate = useNavigate();
   const { tree, isLoading, isWakingServer, error: treeError, loadTree, getPersonById, addPerson, fitPending, clearFitPending, refreshDuplicateCount } = useFamilyTreeStore();
   const { isAuthenticated, onboarded, personId, userId, activeTreeId, treeAccesses } = useAuthStore();
+  const activeRole = treeAccesses.find((a) => a.treeId === activeTreeId)?.role;
+  const canWrite = isAuthenticated && activeRole !== "visitor";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Surbrillance de lignée : personne racine + direction (ascendants/descendants).
@@ -747,6 +749,7 @@ function JabotCanvas() {
             onClose={() => { setSelectedId(null); setLineage(null); }}
             onSelectPerson={(id) => { setSelectedId(id); setLineage(null); }}
             isAuthenticated={isAuthenticated}
+            canWrite={canWrite}
             onEdit={(p) => setForm({ mode: "edit", person: p })}
           />
         </div>
