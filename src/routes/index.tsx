@@ -453,9 +453,20 @@ function JabotCanvas() {
           </div>
           <h1 className="font-serif text-xl leading-none text-foreground">Jabot</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {isAuthenticated ? (
             <>
+              {surnameStats.length > 1 && (
+                <div className="hidden sm:flex max-w-[280px] overflow-x-auto">
+                  <SurnameLegend
+                    stats={surnameStats}
+                    activeFilter={surnameFilter}
+                    onToggle={toggleSurname}
+                    onClear={() => setSurnameFilter(new Set())}
+                    inline
+                  />
+                </div>
+              )}
               <button
                 onClick={() => setSearchOpen((o) => !o)}
                 className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -707,16 +718,7 @@ function JabotCanvas() {
             </div>
           )}
 
-          {personsWithLayout.length > 0 && (
-            <SurnameLegend
-              stats={surnameStats}
-              activeFilter={surnameFilter}
-              onToggle={toggleSurname}
-              onClear={() => setSurnameFilter(new Set())}
-            />
-          )}
-
-          <Toolbar onCenterSelf={centerSelf} onFitAll={fitAll} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
+          <Toolbar onCenterSelf={centerSelf} onFitAll={fitAll} onZoomIn={() => zoomBy(1.25)} onZoomOut={() => zoomBy(0.8)} onExport={isAuthenticated ? () => setExportOpen(true) : undefined} />
 
           {personsWithLayout.length > 0 && (
             <MiniMap
