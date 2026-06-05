@@ -64,16 +64,17 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   }, [forceOpen]);
 
   useEffect(() => {
-    if (!open || tab !== "history") return;
+    // Recharger l'historique uniquement quand l'onglet est sélectionné manuellement
+    // (handleOpen le pré-charge déjà en cas de demande pending)
+    if (!open || tab !== "history" || myRequests.length > 0) return;
     setLoadingHistory(true);
     mergeRequestsApi.listAll()
       .then((reqs) => {
-        // Only show requests submitted by the current user
         setMyRequests(reqs.filter((r) => r.requestedByUserId === userId));
       })
       .catch(() => {})
       .finally(() => setLoadingHistory(false));
-  }, [open, tab, userId]);
+  }, [open, tab, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!shouldShowPill && !open) return null;
 
@@ -84,6 +85,24 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
     setError(null);
     setTab("new");
     setOpen(true);
+
+    // Vérifier s'il existe déjà une demande pending pour cet arbre source
+    if (ownedTree) {
+      try {
+        const existing = await mergeRequestsApi.listAll();
+        const hasPending = existing.some(
+          (r) => r.sourceTreeId === ownedTree.treeId && r.status === "pending"
+        );
+        if (hasPending) {
+          setMyRequests(existing.filter((r) => r.requestedByUserId === userId));
+          setTab("history");
+          setStep("not_found"); // reset step (tab "history" ne l'utilise pas)
+          return;
+        }
+      } catch {
+        // En cas d'erreur, continuer le flux normal
+      }
+    }
 
     const preloaded = injectedMatches ?? preloadedMatches;
     if (preloaded && preloaded.length > 0) {
