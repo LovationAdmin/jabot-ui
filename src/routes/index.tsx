@@ -456,17 +456,12 @@ function JabotCanvas() {
         <div className="flex items-center gap-2 min-w-0">
           {isAuthenticated ? (
             <>
-              {surnameStats.length > 1 && (
-                <div className="hidden sm:flex max-w-[280px] overflow-x-auto">
-                  <SurnameLegend
-                    stats={surnameStats}
-                    activeFilter={surnameFilter}
-                    onToggle={toggleSurname}
-                    onClear={() => setSurnameFilter(new Set())}
-                    inline
-                  />
-                </div>
-              )}
+              <SurnameLegend
+                stats={surnameStats}
+                activeFilter={surnameFilter}
+                onToggle={toggleSurname}
+                onClear={() => setSurnameFilter(new Set())}
+              />
               <button
                 onClick={() => setSearchOpen((o) => !o)}
                 className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -525,19 +520,6 @@ function JabotCanvas() {
         activeId={activeTreeId ?? ""}
         onSelect={(id) => { useAuthStore.getState().setActiveTree(id); }}
       />
-
-      {/* Filtre noms de famille — barre scrollable sous le header sur mobile */}
-      {surnameStats.length > 1 && (
-        <div className="sm:hidden shrink-0 border-b border-border bg-card/85 px-3 py-1.5 backdrop-blur-md overflow-x-auto">
-          <SurnameLegend
-            stats={surnameStats}
-            activeFilter={surnameFilter}
-            onToggle={toggleSurname}
-            onClear={() => setSurnameFilter(new Set())}
-            inline
-          />
-        </div>
-      )}
 
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
