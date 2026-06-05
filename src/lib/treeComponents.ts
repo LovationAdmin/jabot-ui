@@ -109,8 +109,8 @@ export function computeTreeTabName(persons: Person[], relationships: Relationshi
     freq.set(n, (freq.get(n) ?? 0) + 1);
   }
   const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
-  const top = [...new Set(sorted.map(([name]) => name))].slice(0, 2);
-  return top.length === 0 ? "Arbre" : top.join(" · ");
+  const top = [...new Set(sorted.map(([name]) => name))].slice(0, 3);
+  return top.length === 0 ? "Arbre" : top.join("-");
 }
 
 // ── Nom par défaut ────────────────────────────────────────────────
