@@ -104,6 +104,12 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
       }
     }
 
+    if (!ownedTree) {
+      setError("Vous n'êtes propriétaire d'aucun arbre. Créez votre propre arbre avant de pouvoir relier.");
+      setStep("not_found");
+      return;
+    }
+
     const preloaded = injectedMatches ?? preloadedMatches;
     if (preloaded && preloaded.length > 0) {
       setMatches(preloaded);
@@ -135,7 +141,15 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
   }
 
   async function handleRequestMerge() {
-    if (!selectedMatch || !ownedTree) return;
+    if (!selectedMatch) return;
+    if (!ownedTree) {
+      setError("Vous devez être propriétaire d'un arbre pour envoyer une demande de fusion. Vous n'avez pas d'arbre en cours.");
+      return;
+    }
+    if (ownedTree.treeId === selectedMatch.treeId) {
+      setError("L'arbre source et l'arbre cible sont identiques.");
+      return;
+    }
     setStep("requesting");
     setError(null);
     try {
@@ -313,8 +327,7 @@ export function ConvergeBanner({ forceOpen, onForceOpenHandled, preloadedMatches
                     <div className="flex items-start gap-2.5">
                       <AlertCircle className="size-4 shrink-0 text-muted-foreground mt-0.5" />
                       <p className="text-sm text-muted-foreground">
-                        Aucune fiche commune n'a été trouvée automatiquement.
-                        Demandez à un membre de l'autre arbre de vous inviter.
+                        {error ?? "Aucune fiche commune n'a été trouvée automatiquement. Demandez à un membre de l'autre arbre de vous inviter."}
                       </p>
                     </div>
                     <button
