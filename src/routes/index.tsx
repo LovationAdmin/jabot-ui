@@ -759,7 +759,7 @@ function JabotCanvas() {
       {exportOpen && (
         <ExportDialog
           worldRef={worldRef}
-          persons={visiblePersons}
+          persons={personsWithLayout}
           surnameStats={surnameStats}
           surnameFilter={surnameFilter}
           onClose={() => setExportOpen(false)}

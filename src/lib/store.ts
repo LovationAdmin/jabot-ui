@@ -16,6 +16,7 @@ interface AuthStore extends AuthState {
   setOnboarded: (personId: string, firstName?: string) => void;
   setTreeAccesses: (accesses: TreeAccess[], activeTreeId?: string | null) => void;
   setActiveTree: (treeId: string) => void;
+  setPhone: (phone: string) => void;
   logout: () => void;
 }
 
@@ -68,6 +69,8 @@ export const useAuthStore = create<AuthStore>()(
         setActiveTreeId(treeId);
         set({ activeTreeId: treeId });
       },
+
+      setPhone: (phone) => set({ phone }),
 
       logout: () => {
         if (typeof window !== "undefined") localStorage.removeItem("jabot_token");

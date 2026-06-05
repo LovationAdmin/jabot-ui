@@ -232,6 +232,15 @@ export const authApi = {
     await apiClient.delete("/auth/me");
   },
 
+  requestPhoneChange: async (newPhone: string): Promise<{ message: string; dev_code?: string }> => {
+    const { data } = await apiClient.post<{ message: string; dev_code?: string }>("/auth/request-phone-change", { new_phone: newPhone });
+    return data;
+  },
+
+  confirmPhoneChange: async (newPhone: string, code: string): Promise<void> => {
+    await apiClient.post("/auth/confirm-phone-change", { new_phone: newPhone, code });
+  },
+
   onboardSearch: async (params: {
     name?: string;
     nickname?: string;

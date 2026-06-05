@@ -104,7 +104,7 @@ export function PersonCard({
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 break-words font-display text-[14px] font-semibold leading-tight text-card-foreground">{fullName}</p>
+        <p className="break-words font-display text-[14px] font-semibold leading-tight text-card-foreground" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{fullName}</p>
         {isAuthenticated && person.nicknames && person.nicknames.length > 0 && (
           <p className="truncate text-[11px]" style={familyColor ? { color: familyColor.accent } : { color: "var(--color-primary)" }}>
             &laquo; {person.nicknames[0]} &raquo;

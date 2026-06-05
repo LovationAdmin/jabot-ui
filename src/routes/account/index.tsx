@@ -1,25 +1,31 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Phone, IdCard, LogOut, ShieldCheck, Trash2, AlertTriangle, History, ChevronRight, GitMerge, DatabaseBackup } from "lucide-react";
+import { ArrowLeft, Phone, IdCard, LogOut, ShieldCheck, Trash2, AlertTriangle, History, ChevronRight, GitMerge, Check, X } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
-import { authApi, adminApi } from "@/lib/api";
+import { authApi } from "@/lib/api";
 
 export const Route = createFileRoute("/account/")({
   head: () => ({ meta: [{ title: "Mon compte — Jabot" }] }),
   component: AccountPage,
 });
 
+type PhoneStep = "idle" | "enter" | "otp";
+
 function AccountPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, phone, personId, onboarded, logout } = useAuthStore();
+  const { isAuthenticated, phone, personId, onboarded, logout, setPhone } = useAuthStore();
   const { tree, loadTree, getPersonById } = useFamilyTreeStore();
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm">("idle");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [resetSecret, setResetSecret] = useState("");
-  const [resetStep, setResetStep] = useState<"idle" | "confirm">("idle");
-  const [resetBusy, setResetBusy] = useState(false);
-  const [resetMsg, setResetMsg] = useState<string | null>(null);
+
+  // ── Changement de numéro ─────────────────────────────────────────────
+  const [phoneStep, setPhoneStep] = useState<PhoneStep>("idle");
+  const [newPhone, setNewPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneDevCode, setPhoneDevCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) navigate({ to: "/auth" });
@@ -31,20 +37,46 @@ function AccountPage() {
 
   const me = personId ? getPersonById(personId) : undefined;
 
-  async function handleResetDb() {
-    setResetBusy(true);
-    setResetMsg(null);
+  async function handleRequestOtp() {
+    setPhoneBusy(true);
+    setPhoneError(null);
+    setPhoneDevCode(null);
     try {
-      const { message } = await adminApi.resetDb(resetSecret);
-      setResetMsg(message);
-      setResetStep("idle");
-      setResetSecret("");
-      await loadTree();
-    } catch {
-      setResetMsg("Echec de la purge. Verifie le secret.");
+      const res = await authApi.requestPhoneChange(newPhone);
+      if (res.dev_code) setPhoneDevCode(res.dev_code);
+      setPhoneStep("otp");
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setPhoneError(detail ?? "Impossible d'envoyer le SMS. Réessayez.");
     } finally {
-      setResetBusy(false);
+      setPhoneBusy(false);
     }
+  }
+
+  async function handleConfirmOtp() {
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      await authApi.confirmPhoneChange(newPhone, otpCode);
+      setPhone(newPhone);
+      setPhoneStep("idle");
+      setNewPhone("");
+      setOtpCode("");
+      setPhoneDevCode(null);
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setPhoneError(detail ?? "Code invalide. Réessayez.");
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
+
+  function cancelPhoneChange() {
+    setPhoneStep("idle");
+    setNewPhone("");
+    setOtpCode("");
+    setPhoneError(null);
+    setPhoneDevCode(null);
   }
 
   async function handleDeleteAccount() {
@@ -72,7 +104,87 @@ function AccountPage() {
           <h1 className="mb-6 font-serif text-2xl text-foreground">Parametres du compte</h1>
 
           <div className="space-y-4">
-            <Row icon={<Phone className="size-4" />} label="Numero de telephone" value={phone ?? "—"} />
+            {/* Numéro de téléphone avec bouton de modification */}
+            <div className="rounded-xl border border-border bg-background px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                  <Phone className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">Numero de telephone</p>
+                  <p className="truncate text-sm font-medium text-foreground">{phone ?? "—"}</p>
+                </div>
+                {phoneStep === "idle" && (
+                  <button
+                    onClick={() => setPhoneStep("enter")}
+                    className="shrink-0 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    Modifier
+                  </button>
+                )}
+              </div>
+
+              {/* Formulaire inline de changement */}
+              {phoneStep === "enter" && (
+                <div className="mt-3 space-y-2 border-t border-border pt-3">
+                  <p className="text-xs text-muted-foreground">Entrez votre nouveau numéro (format international, ex : +22612345678)</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      placeholder="+226..."
+                      className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <button
+                      onClick={handleRequestOtp}
+                      disabled={phoneBusy || !newPhone.trim()}
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      {phoneBusy ? <div className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Check className="size-4" />}
+                    </button>
+                    <button onClick={cancelPhoneChange} className="rounded-lg border border-border px-2 py-2 text-muted-foreground hover:bg-muted">
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                </div>
+              )}
+
+              {phoneStep === "otp" && (
+                <div className="mt-3 space-y-2 border-t border-border pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Code envoyé au <span className="font-medium text-foreground">{newPhone}</span>
+                  </p>
+                  {phoneDevCode && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 font-mono">Dev : {phoneDevCode}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      placeholder="123456"
+                      maxLength={6}
+                      className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <button
+                      onClick={handleConfirmOtp}
+                      disabled={phoneBusy || otpCode.length < 4}
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      {phoneBusy ? <div className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Check className="size-4" />}
+                    </button>
+                    <button onClick={cancelPhoneChange} className="rounded-lg border border-border px-2 py-2 text-muted-foreground hover:bg-muted">
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                </div>
+              )}
+            </div>
+
             <Row
               icon={<IdCard className="size-4" />}
               label="Ma fiche dans l'arbre"
@@ -123,61 +235,6 @@ function AccountPage() {
               <LogOut className="size-4" /> Se deconnecter
             </button>
           </div>
-        </div>
-
-        {/* Zone admin : purge BDD */}
-        <div className="rounded-2xl border border-orange-200 bg-card p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <DatabaseBackup className="size-4 text-orange-500" />
-            <h2 className="font-semibold text-foreground">Reinitialiser la base</h2>
-          </div>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Supprime toutes les fiches, relations et medias. Les comptes utilisateurs sont conserves.
-            Requiert le secret RESET_SECRET configure sur le serveur.
-          </p>
-          {resetMsg && (
-            <p className="mb-3 text-sm text-orange-600 font-medium">{resetMsg}</p>
-          )}
-          {resetStep === "idle" ? (
-            <button
-              onClick={() => setResetStep("confirm")}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-orange-300 py-3 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
-            >
-              <DatabaseBackup className="size-4" /> Purger la base de donnees
-            </button>
-          ) : (
-            <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
-              <p className="text-sm text-foreground">Entrez le secret pour confirmer :</p>
-              <input
-                type="password"
-                value={resetSecret}
-                onChange={(e) => setResetSecret(e.target.value)}
-                placeholder="RESET_SECRET"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-400"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setResetStep("idle"); setResetSecret(""); }}
-                  disabled={resetBusy}
-                  className="flex-1 rounded-xl border border-border py-2.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleResetDb}
-                  disabled={resetBusy || !resetSecret}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {resetBusy ? (
-                    <div className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    <DatabaseBackup className="size-4" />
-                  )}
-                  Confirmer la purge
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Zone danger : suppression du compte */}
