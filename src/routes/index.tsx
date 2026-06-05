@@ -526,6 +526,19 @@ function JabotCanvas() {
         onSelect={(id) => { useAuthStore.getState().setActiveTree(id); }}
       />
 
+      {/* Filtre noms de famille — barre scrollable sous le header sur mobile */}
+      {surnameStats.length > 1 && (
+        <div className="sm:hidden shrink-0 border-b border-border bg-card/85 px-3 py-1.5 backdrop-blur-md overflow-x-auto">
+          <SurnameLegend
+            stats={surnameStats}
+            activeFilter={surnameFilter}
+            onToggle={toggleSurname}
+            onClear={() => setSurnameFilter(new Set())}
+            inline
+          />
+        </div>
+      )}
+
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
         {isAuthenticated && !searchOpen && <ConvergeBanner forceOpen={convergeOpen} onForceOpenHandled={() => setConvergeOpen(false)} preloadedMatches={convergeMatches} />}
