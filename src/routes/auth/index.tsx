@@ -95,12 +95,28 @@ function AuthPage() {
 
           {step === "phone" && (
             <>
-              <div className="mb-6 text-center">
-                <h1 className="font-serif text-2xl text-foreground">Creer ma fiche</h1>
+              <div className="mb-5 text-center">
+                <h1 className="font-serif text-2xl text-foreground">Créer ma fiche</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Entrez votre numero pour recevoir un code
+                  Pas de mot de passe : la connexion se fait par SMS
                 </p>
               </div>
+
+              {/* Comment ça marche — guide de première connexion */}
+              <ol className="mb-5 space-y-2.5 rounded-xl border border-border/60 bg-muted/40 p-4 text-left">
+                {[
+                  "Entrez votre numéro de téléphone (format international)",
+                  "Recevez un code à 6 chiffres par SMS, envoyé par « Lovation »",
+                  "Saisissez le code : vous êtes connecté et votre fiche se crée",
+                ].map((s, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-xs text-muted-foreground">
+                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <span className="pt-0.5">{s}</span>
+                  </li>
+                ))}
+              </ol>
               <form onSubmit={handlePhoneSubmit} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-foreground">
@@ -168,6 +184,11 @@ function AuthPage() {
                     {error}
                   </p>
                 )}
+                <p className="text-center text-xs text-muted-foreground">
+                  Le SMS de « Lovation » arrive en général sous une minute et le
+                  code reste valable 10 minutes. L'envoi est limité à 2 codes
+                  par 24 h pour chaque numéro.
+                </p>
                 <button
                   type="submit"
                   disabled={isLoading || otpInput.length < 6}
