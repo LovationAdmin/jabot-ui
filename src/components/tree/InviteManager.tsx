@@ -20,8 +20,9 @@ export function InviteManager({ onClose }: InviteManagerProps) {
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [devCode, setDevCode] = useState<string | null>(null);
-  const [devToken, setDevToken] = useState<string | null>(null);
+  // Résultat du dernier envoi : token toujours présent ; code seulement si le
+  // SMS n'est pas parti (à partager manuellement avec le lien).
+  const [lastResult, setLastResult] = useState<{ token: string; smsSent: boolean; code?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [list, setList] = useState<InvitationItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -38,32 +39,25 @@ export function InviteManager({ onClose }: InviteManagerProps) {
     if (!phone.trim()) return;
     setSending(true);
     setSendError(null);
-    setDevCode(null);
-    setDevToken(null);
+    setLastResult(null);
     try {
       const res = await invitationsApi.create(phone.trim());
-      if (res.dev_code) {
-        setDevCode(res.dev_code);
-        setDevToken(res.token);
-      }
+      setLastResult({ token: res.token, smsSent: !!res.sms_sent, code: res.dev_code ?? undefined });
       setPhone("");
       const updated = await invitationsApi.list();
       setList(updated);
     } catch (err: any) {
-      const detail = err?.response?.data?.detail ?? "Erreur lors de l'envoi.";
-      if (detail.includes("pas encore activé")) {
-        setSendError("Le système d'invitation n'est pas encore activé (Vonage en attente).");
-      } else {
-        setSendError(detail);
-      }
+      // Affiche le message du serveur tel quel (quota SMS 429, feature
+      // désactivée 503, numéro invalide 400…).
+      setSendError(err?.response?.data?.detail ?? "Erreur lors de l'envoi.");
     } finally {
       setSending(false);
     }
   }
 
   function copyLink() {
-    if (!devToken) return;
-    const url = `${window.location.origin}/invite?token=${devToken}`;
+    if (!lastResult) return;
+    const url = `${window.location.origin}/invite?token=${lastResult.token}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -122,19 +116,35 @@ export function InviteManager({ onClose }: InviteManagerProps) {
           <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{sendError}</p>
         )}
 
-        {devCode && (
+        {lastResult?.smsSent && (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-green-800">
+              <Check className="size-3.5" /> Invitation envoyée par SMS
+            </p>
+            <button
+              onClick={copyLink}
+              className="mt-2 flex items-center gap-1.5 text-xs text-green-700 hover:text-green-900"
+            >
+              {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+              {copied ? "Copié !" : "Copier aussi le lien d'invitation"}
+            </button>
+          </div>
+        )}
+
+        {lastResult && !lastResult.smsSent && lastResult.code && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs font-medium text-amber-800">Mode dev — code non envoyé par SMS</p>
-            <p className="mt-1 font-mono text-lg font-bold text-amber-900">{devCode}</p>
-            {devToken && (
-              <button
-                onClick={copyLink}
-                className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900"
-              >
-                {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-                {copied ? "Copié !" : "Copier le lien d'invitation"}
-              </button>
-            )}
+            <p className="text-xs font-medium text-amber-800">
+              Le SMS n'a pas pu être envoyé — partagez vous-même le lien et ce code
+              (WhatsApp, etc.) :
+            </p>
+            <p className="mt-1 font-mono text-lg font-bold tracking-widest text-amber-900">{lastResult.code}</p>
+            <button
+              onClick={copyLink}
+              className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900"
+            >
+              {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+              {copied ? "Copié !" : "Copier le lien d'invitation"}
+            </button>
           </div>
         )}
 

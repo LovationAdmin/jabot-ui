@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { User, LogOut, IdCard, ChevronDown, UserPlus, History, TreePine, Check, Copy, GitMerge } from "lucide-react";
+import { User, LogOut, IdCard, ChevronDown, UserPlus, History, TreePine, Check, Copy, GitMerge, CircleHelp } from "lucide-react";
 import { useAuthStore, useFamilyTreeStore } from "@/lib/store";
 
 interface Props {
   onEditMyCard?: () => void;
   onInvite?: () => void;
   onConverge?: () => void;
+  onShowTutorial?: () => void;
 }
 
-export function AccountMenu({ onEditMyCard, onInvite, onConverge }: Props) {
+export function AccountMenu({ onEditMyCard, onInvite, onConverge, onShowTutorial }: Props) {
   const { phone, personId, firstName: storedFirstName, logout, treeAccesses, activeTreeId, setActiveTree } = useAuthStore();
   const { getPersonById, loadTree, duplicateCount } = useFamilyTreeStore();
   const [open, setOpen] = useState(false);
@@ -142,6 +143,14 @@ export function AccountMenu({ onEditMyCard, onInvite, onConverge }: Props) {
             >
               <History className="size-4 text-muted-foreground" /> Journal d'activité
             </Link>
+            {onShowTutorial && (
+              <button
+                onClick={() => { setOpen(false); onShowTutorial(); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <CircleHelp className="size-4 text-muted-foreground" /> Revoir le tutoriel
+              </button>
+            )}
             <Link
               to="/account"
               onClick={() => setOpen(false)}

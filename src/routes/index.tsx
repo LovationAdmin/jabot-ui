@@ -14,7 +14,9 @@ import { ConvergeBanner } from "@/components/tree/ConvergeBanner";
 import { MergeRequestPopup } from "@/components/tree/MergeRequestPopup";
 import { DuplicateAlert } from "@/components/tree/DuplicateAlert";
 import { TreeTabs } from "@/components/tree/TreeTabs";
+import { FamilyScopeToggle } from "@/components/tree/FamilyScopeToggle";
 import { OnboardingDialog } from "@/components/onboarding/OnboardingDialog";
+import { FirstStepsDialog } from "@/components/onboarding/FirstStepsDialog";
 import { useFamilyTreeStore, useAuthStore } from "@/lib/store";
 import { invitationsApi, setActiveTreeId, personsApi } from "@/lib/api";
 import { useTreeSync } from "@/lib/useTreeSync";
@@ -24,8 +26,7 @@ import { Person } from "@/lib/types";
 import { computeFamilyColors } from "@/lib/familyColors";
 import { computeSurnameStats, buildSurnameColorMap, normalizeSurname } from "@/lib/surnameColors";
 import { ancestorsOf, descendantsOf } from "@/lib/lineage";
-import { LogIn, TreePine, Plus, Search, X, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { LogIn, TreePine, Plus, Search, X, Users, MessageSquare, Share2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -79,6 +80,19 @@ function JabotCanvas() {
 
   // L'onboarding s'affiche une seule fois : connecte mais pas encore rattache.
   const showOnboarding = isAuthenticated && !onboarded;
+
+  // Mini-tutoriel de premiere connexion : apres l'onboarding, une seule fois
+  // par utilisateur (flag localStorage). Reaffichable depuis le menu compte.
+  const firstStepsKey = userId ? `jabot:first-steps:${userId}` : null;
+  const [showFirstSteps, setShowFirstSteps] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated || !onboarded || !firstStepsKey) return;
+    if (!localStorage.getItem(firstStepsKey)) setShowFirstSteps(true);
+  }, [isAuthenticated, onboarded, firstStepsKey]);
+  const closeFirstSteps = () => {
+    if (firstStepsKey) localStorage.setItem(firstStepsKey, "1");
+    setShowFirstSteps(false);
+  };
 
   // Contrôle d'accès : un visiteur anonyme n'accède au canvas que s'il possède
   // un cookie d'invitation validé. Sans ça → page de bienvenue.
@@ -410,37 +424,76 @@ function JabotCanvas() {
     );
   }
 
-  // Visiteur sans invitation valide → page de bienvenue
+  // Visiteur sans invitation valide → page d'accueil (landing jabotai.com)
   if (!visitorAllowed) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 text-center">
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-            <TreePine className="size-7" />
+      <div className="canvas-grid flex min-h-screen flex-col bg-canvas">
+        <main className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
+          {/* Héro */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="grid size-16 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+              <TreePine className="size-8" />
+            </div>
+            <h1 className="font-serif text-5xl text-foreground">Jabot</h1>
+            <p className="max-w-md text-balance text-base text-muted-foreground">
+              Construisez et explorez l'arbre généalogique de votre famille,
+              ensemble — des grands-parents aux petits-enfants.
+            </p>
           </div>
-          <h1 className="font-serif text-4xl text-foreground">Jabot</h1>
-          <p className="text-base text-muted-foreground">Votre arbre généalogique africain</p>
-        </div>
-        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-card space-y-5">
-          <h2 className="font-semibold text-lg text-foreground">Bienvenue</h2>
-          <p className="text-sm text-muted-foreground">
-            Pour accéder à un arbre, vous devez être membre ou avoir reçu une invitation.
-          </p>
-          <div className="flex flex-col gap-3">
+
+          {/* Appels à l'action */}
+          <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
             <button
               onClick={() => navigate({ to: "/auth" })}
-              className="w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground shadow-card transition-colors hover:bg-primary/90"
             >
-              Se connecter / Créer un compte
+              Créer mon arbre / Se connecter
             </button>
             <button
               onClick={() => navigate({ to: "/invite" })}
-              className="w-full rounded-xl border border-border bg-background py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              className="w-full rounded-xl border border-border bg-card py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
               J'ai reçu une invitation
             </button>
           </div>
-        </div>
+
+          {/* Ce que fait Jabot, en trois points */}
+          <div className="mt-10 grid w-full max-w-3xl gap-3 text-left sm:grid-cols-3">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
+              <TreePine className="size-5 text-primary" />
+              <h3 className="mt-2.5 text-sm font-semibold text-foreground">Un arbre vivant</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Fiches, photos et voix de vos proches sur un canvas interactif,
+                sur téléphone comme sur ordinateur.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
+              <MessageSquare className="size-5 text-primary" />
+              <h3 className="mt-2.5 text-sm font-semibold text-foreground">Connexion par SMS</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Pas de mot de passe : un code de vérification envoyé par SMS
+                suffit pour accéder à votre arbre en toute sécurité.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
+              <Users className="size-5 text-primary" />
+              <h3 className="mt-2.5 text-sm font-semibold text-foreground">Toute la famille</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Invitez vos proches : chacun consulte l'arbre, le complète et
+                relie sa branche à la famille étendue.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-8 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Share2 className="size-3.5" />
+            Membre d'une famille déjà sur Jabot ? Demandez une invitation à un proche.
+          </p>
+        </main>
+
+        <footer className="pb-6 text-center text-xs text-muted-foreground/70">
+          Jabot — un projet Lovation · jabotai.com
+        </footer>
       </div>
     );
   }
@@ -471,20 +524,14 @@ function JabotCanvas() {
                 <Search className="size-3.5" />
                 <span className="hidden sm:block">Rechercher</span>
               </button>
-              {isAuthenticated && (
-                <button
-                  onClick={() => setShowExtended((v) => !v)}
-                  title={showExtended ? "Masquer la famille étendue" : "Afficher la famille étendue"}
-                  className={cn(
-                    "flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors",
-                    showExtended
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <Users className="size-3.5" />
-                  <span className="hidden sm:block">{showExtended ? "Famille étendue" : "Famille directe"}</span>
-                </button>
+              {/* Desktop : bascule directe/étendue dans le header. Sur mobile
+                  elle flotte en bas du canvas (toujours libellée). */}
+              {personId && (
+                <FamilyScopeToggle
+                  showExtended={showExtended}
+                  onChange={setShowExtended}
+                  className="hidden sm:flex"
+                />
               )}
               <button
                 onClick={() => setForm({ mode: "create" })}
@@ -493,7 +540,7 @@ function JabotCanvas() {
                 <Plus className="size-4" />
                 <span className="hidden sm:block">Ajouter</span>
               </button>
-              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} onConverge={() => setConvergeOpen(true)} />
+              <AccountMenu onEditMyCard={editMyCard} onInvite={() => setInviteOpen(true)} onConverge={() => setConvergeOpen(true)} onShowTutorial={() => setShowFirstSteps(true)} />
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -522,6 +569,14 @@ function JabotCanvas() {
         activeId={activeTreeId ?? ""}
         onSelect={(id) => { useAuthStore.getState().setActiveTree(id); }}
       />
+
+      {/* Mobile : la bascule directe/étendue a sa propre barre sous le header,
+          libellés toujours visibles (sur desktop elle est dans le header). */}
+      {personId && (
+        <div className="flex shrink-0 justify-center border-b border-border bg-card/85 px-4 py-1.5 backdrop-blur-md sm:hidden">
+          <FamilyScopeToggle showExtended={showExtended} onChange={setShowExtended} />
+        </div>
+      )}
 
       <main className="relative flex flex-1 overflow-hidden">
         {/* Banniere de convergence (visiteur authentifie possedant un autre arbre) */}
@@ -757,6 +812,7 @@ function JabotCanvas() {
 
       {isAuthenticated && <MergeRequestPopup />}
       {showOnboarding && <OnboardingDialog onCompleted={centerOnPerson} />}
+      {!showOnboarding && showFirstSteps && <FirstStepsDialog onClose={closeFirstSteps} />}
       {form && <PersonFormDialog mode={form.mode} person={form.person} onClose={() => setForm(null)} onConverge={(matches) => { setForm(null); setConvergeMatches(matches ?? []); setConvergeOpen(true); }} />}
       {inviteOpen && <InviteManager onClose={() => setInviteOpen(false)} />}
       {exportOpen && (

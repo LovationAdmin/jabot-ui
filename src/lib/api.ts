@@ -658,7 +658,9 @@ export const duplicatesApi = {
 // ─── Invitations ──────────────────────────────────────────────────
 
 export const invitationsApi = {
-  create: async (phone: string): Promise<{ invitation_id: string; token: string; dev_code?: string }> => {
+  // dev_code n'est présent que si le SMS n'est pas parti (mode dev, feature
+  // désactivée ou échec d'envoi) : l'inviteur partage alors lien + code lui-même.
+  create: async (phone: string): Promise<{ invitation_id: string; token: string; sms_sent?: boolean; dev_code?: string }> => {
     const { data } = await apiClient.post("/invitations/", { phone });
     return data;
   },
